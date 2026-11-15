@@ -6,20 +6,16 @@ const ZATCA_ENDPOINTS = {
   PRODUCTION: 'https://gw-fatoora.zatca.gov.sa/e-invoicing/core'
 };
 
-/**
- * Submits B2B (Clearance) or B2C (Reporting) Invoice to ZATCA Phase 2 API
- */
 async function submitToZatca({ company, uuid, invoiceHash, xmlContent, docType }) {
   const baseUrl = ZATCA_ENDPOINTS[company.zatca_env] || ZATCA_ENDPOINTS.SANDBOX;
   const isB2B = docType.startsWith('B2B');
   const endpoint = isB2B ? `${baseUrl}/invoices/clearance/single` : `${baseUrl}/invoices/reporting/single`;
 
-  // If CSID is not onboarded yet, return simulated Sandbox acceptance so POS testing works smoothly
   if (!company.csid_certificate || !company.secret_key) {
     return {
       status: isB2B ? 'CLEARED' : 'REPORTED',
       mode: 'SANDBOX_LOCAL_SIMULATION',
-      message: 'CSID not configured yet. Stored locally with valid Phase 2 XML, Hash & 9-Tag QR.'
+      message: 'CSID not configured yet. Stored with valid Phase 2 XML, Hash & 9-Tag QR.'
     };
   }
 
@@ -29,11 +25,7 @@ async function submitToZatca({ company, uuid, invoiceHash, xmlContent, docType }
   try {
     const response = await axios.post(
       endpoint,
-      {
-        invoiceHash,
-        uuid,
-        invoice: xmlBase64
-      },
+      { invoiceHash, uuid, invoice: xmlBase64 },
       {
         headers: {
           Authorization: `Basic ${authToken}`,

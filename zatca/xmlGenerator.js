@@ -1,15 +1,10 @@
 const { create } = require('xmlbuilder2');
 
-/**
- * Generates ZATCA Phase 2 UBL 2.1 Compliant XML for Invoices & Credit Notes
- */
 function generateZatcaXML({ company, invoice, party, items }) {
   const isCreditNote = invoice.doc_type.includes('CREDIT_NOTE');
   const isB2B = invoice.doc_type.startsWith('B2B');
 
-  // ZATCA Type Codes: 388 = Tax Invoice, 381 = Credit Note
   const typeCode = isCreditNote ? '381' : '388';
-  // Subtype: 0100000 = Standard (B2B), 0200000 = Simplified (B2C)
   const subType = isB2B ? '0100000' : '0200000';
 
   const issueDate = new Date(invoice.created_at).toISOString().split('T')[0];
@@ -31,7 +26,6 @@ function generateZatcaXML({ company, invoice, party, items }) {
     .ele('cbc:DocumentCurrencyCode').txt('SAR').up()
     .ele('cbc:TaxCurrencyCode').txt('SAR').up();
 
-  // Credit Note requires BillingReference to original invoice
   if (isCreditNote && invoice.original_invoice_ref) {
     doc.ele('cac:BillingReference')
       .ele('cac:InvoiceDocumentReference')
@@ -39,20 +33,17 @@ function generateZatcaXML({ company, invoice, party, items }) {
       .up().up();
   }
 
-  // ICV (Invoice Counter Value)
   doc.ele('cac:AdditionalDocumentReference')
     .ele('cbc:ID').txt('ICV').up()
     .ele('cbc:UUID').txt(String(invoice.icv)).up()
     .up();
 
-  // PIH (Previous Invoice Hash)
   doc.ele('cac:AdditionalDocumentReference')
     .ele('cbc:ID').txt('PIH').up()
     .ele('cac:Attachment')
     .ele('cbc:EmbeddedDocumentBinaryObject', { mimeCode: 'text/plain' }).txt(invoice.pih).up()
     .up().up();
 
-  // Seller (AccountingSupplierParty)
   const supplier = doc.ele('cac:AccountingSupplierParty').ele('cac:Party');
   supplier.ele('cac:PartyIdentification')
     .ele('cbc:ID', { schemeID: 'CRN' }).txt(company.cr_number || '1010000000').up()
@@ -69,7 +60,6 @@ function generateZatcaXML({ company, invoice, party, items }) {
     .ele('cbc:RegistrationName').txt(company.company_name_ar).up()
     .up();
 
-  // Buyer (AccountingCustomerParty)
   const customer = doc.ele('cac:AccountingCustomerParty').ele('cac:Party');
   if (party && party.vat_number) {
     customer.ele('cac:PartyTaxScheme')
@@ -81,12 +71,10 @@ function generateZatcaXML({ company, invoice, party, items }) {
     .ele('cbc:RegistrationName').txt((party && (party.name_ar || party.name_en)) || 'عميل نقدي').up()
     .up();
 
-  // TaxTotal
   doc.ele('cac:TaxTotal')
     .ele('cbc:TaxAmount', { currencyID: 'SAR' }).txt(Number(invoice.vat_amount).toFixed(2)).up()
     .up();
 
-  // LegalMonetaryTotal
   doc.ele('cac:LegalMonetaryTotal')
     .ele('cbc:LineExtensionAmount', { currencyID: 'SAR' }).txt(Number(invoice.subtotal).toFixed(2)).up()
     .ele('cbc:TaxExclusiveAmount', { currencyID: 'SAR' }).txt(Number(invoice.subtotal).toFixed(2)).up()
@@ -94,9 +82,9 @@ function generateZatcaXML({ company, invoice, party, items }) {
     .ele('cbc:PayableAmount', { currencyID: 'SAR' }).txt(Number(invoice.grand_total).toFixed(2)).up()
     .up();
 
-  // Line Items
   items.forEach((item, idx) => {
-    const lineTotalExcl = Number(item.qty) * Number(item.unit_price);
+    const lineTotalExcl = Number(item.base_subtotal);
+    const baseUnitPrice = Number(item.base_unit_price);
     const line = doc.ele('cac:InvoiceLine');
     line.ele('cbc:ID').txt(String(idx + 1)).up();
     line.ele('cbc:InvoicedQuantity', { unitCode: 'PCE' }).txt(Number(item.qty).toFixed(3)).up();
@@ -113,7 +101,7 @@ function generateZatcaXML({ company, invoice, party, items }) {
       .ele('cac:TaxScheme').ele('cbc:ID').txt('VAT').up().up()
       .up().up();
     line.ele('cac:Price')
-      .ele('cbc:PriceAmount', { currencyID: 'SAR' }).txt(Number(item.unit_price).toFixed(2)).up()
+      .ele('cbc:PriceAmount', { currencyID: 'SAR' }).txt(baseUnitPrice.toFixed(4)).up()
       .up();
   });
 

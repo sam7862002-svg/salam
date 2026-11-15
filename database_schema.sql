@@ -10,9 +10,14 @@ CREATE TABLE IF NOT EXISTS company_settings (
     csid_certificate TEXT,
     private_key TEXT,
     secret_key TEXT,
+    admin_pin VARCHAR(20) DEFAULT '1234',
+    cashier_pin VARCHAR(20) DEFAULT '0000',
     last_icv INTEGER DEFAULT 0,
     last_pih TEXT DEFAULT 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ=='
 );
+
+ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS admin_pin VARCHAR(20) DEFAULT '1234';
+ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS cashier_pin VARCHAR(20) DEFAULT '0000';
 
 INSERT INTO company_settings (id, company_name_en, company_name_ar, vat_number)
 VALUES (1, 'Saudi Retail Store', 'متجر التجزئة السعودي', '300000000000003')
@@ -36,7 +41,7 @@ INSERT INTO parties (party_id, party_type, name_en, name_ar)
 VALUES (1, 'CUSTOMER', 'Walk-in Cash Customer', 'عميل نقدي')
 ON CONFLICT (party_id) DO NOTHING;
 
--- 3. Products & Inventory Master
+-- 3. Products & Inventory Master (selling_price stores Tax-Inclusive Price)
 CREATE TABLE IF NOT EXISTS products (
     product_id SERIAL PRIMARY KEY,
     barcode VARCHAR(50) UNIQUE,

@@ -12,7 +12,6 @@ function generateInvoiceHash(xmlString) {
 
 function signInvoiceHash(xmlHashBase64, privateKeyPem) {
   if (!privateKeyPem || !privateKeyPem.includes('BEGIN')) {
-    // Fallback simulated ECDSA signature for Sandbox testing before onboarding CSID
     return crypto.createHash('sha256').update('SANDBOX_SIG_' + xmlHashBase64).digest('base64');
   }
   const sign = crypto.createSign('SHA256');
@@ -21,9 +20,6 @@ function signInvoiceHash(xmlHashBase64, privateKeyPem) {
   return sign.sign(privateKeyPem, 'base64');
 }
 
-/**
- * Generates ZATCA Phase 2 9-Tag TLV Base64 QR Code
- */
 function generatePhase2QR({
   sellerName,
   vatNumber,
