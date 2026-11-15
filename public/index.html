@@ -25,6 +25,14 @@
       body.print-a4 #a4InvoiceContainer { position: absolute; left: 0; top: 0; width: 210mm; background: white; }
       .no-print { display: none !important; }
     }
+    #qrcode img, #qrcode canvas, #a4QrCode img, #a4QrCode canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background: #ffffff;
+      padding: 6px;
+      border: 1px solid #e2e8f0;
+      margin: 0 auto;
+    }
     @keyframes scanLine {
       0% { top: 15%; }
       50% { top: 82%; }

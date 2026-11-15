@@ -461,9 +461,17 @@ function showReceipt(data, isNewSale = false) {
   });
 
   const is58 = (company.paper_size || appSettings.paper_size) === '58mm';
+  const qrSize = is58 ? 165 : 210;
   const qrDiv = document.getElementById('qrcode');
   qrDiv.innerHTML = '';
-  new QRCode(qrDiv, { text: sale.qr_code_base64, width: is58 ? 110 : 140, height: is58 ? 110 : 140 });
+  new QRCode(qrDiv, {
+    text: sale.qr_code_base64,
+    width: qrSize,
+    height: qrSize,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.L
+  });
 
   populateA4Template(data);
   document.getElementById('receiptModal').classList.remove('hidden');
@@ -534,7 +542,14 @@ function populateA4Template({ sale, items, company, party }) {
 
   const a4Qr = document.getElementById('a4QrCode');
   a4Qr.innerHTML = '';
-  new QRCode(a4Qr, { text: sale.qr_code_base64, width: 120, height: 120 });
+  new QRCode(a4Qr, {
+    text: sale.qr_code_base64,
+    width: 195,
+    height: 195,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.L
+  });
 }
 
 function printThermalReceipt() {
