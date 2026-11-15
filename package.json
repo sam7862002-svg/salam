@@ -1,7 +1,7 @@
 {
   "name": "saudi-zatca-pos",
-  "version": "2.0.0",
-  "description": "Saudi Arabia ZATCA Phase 2 Integrated Cloud POS, Sales/Purchase, Returns, Excel VAT Reports, A4 PDF & WhatsApp Share",
+  "version": "3.0.0",
+  "description": "Saudi Arabia ZATCA Phase 2 Enterprise Cloud POS, Tax-Inclusive Pricing, Live Search, Bulk Excel, Multi-Staff, Credit Ledger, A4 PDF & WhatsApp",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -13,7 +13,6 @@
     "express": "^4.21.1",
     "pg": "^8.13.1",
     "uuid": "^11.0.3",
-    "xlsx": "^0.18.5",
     "xmlbuilder2": "^3.1.1"
   }
 }

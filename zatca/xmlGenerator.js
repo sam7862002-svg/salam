@@ -49,7 +49,7 @@ function generateZatcaXML({ company, invoice, party, items }) {
     .ele('cbc:ID', { schemeID: 'CRN' }).txt(company.cr_number || '1010000000').up()
     .up();
   supplier.ele('cac:PostalAddress')
-    .ele('cbc:StreetName').txt(company.address_ar || 'الرياض').up()
+    .ele('cbc:StreetName').txt(company.address_ar || 'جدة').up()
     .ele('cac:Country').ele('cbc:IdentificationCode').txt('SA').up().up()
     .up();
   supplier.ele('cac:PartyTaxScheme')
@@ -83,12 +83,10 @@ function generateZatcaXML({ company, invoice, party, items }) {
     .up();
 
   items.forEach((item, idx) => {
-    const lineTotalExcl = Number(item.base_subtotal);
-    const baseUnitPrice = Number(item.base_unit_price);
     const line = doc.ele('cac:InvoiceLine');
     line.ele('cbc:ID').txt(String(idx + 1)).up();
     line.ele('cbc:InvoicedQuantity', { unitCode: 'PCE' }).txt(Number(item.qty).toFixed(3)).up();
-    line.ele('cbc:LineExtensionAmount', { currencyID: 'SAR' }).txt(lineTotalExcl.toFixed(2)).up();
+    line.ele('cbc:LineExtensionAmount', { currencyID: 'SAR' }).txt(Number(item.line_sub_excl).toFixed(2)).up();
     line.ele('cac:TaxTotal')
       .ele('cbc:TaxAmount', { currencyID: 'SAR' }).txt(Number(item.vat_amount).toFixed(2)).up()
       .ele('cbc:RoundingAmount', { currencyID: 'SAR' }).txt(Number(item.line_total).toFixed(2)).up()
@@ -101,7 +99,7 @@ function generateZatcaXML({ company, invoice, party, items }) {
       .ele('cac:TaxScheme').ele('cbc:ID').txt('VAT').up().up()
       .up().up();
     line.ele('cac:Price')
-      .ele('cbc:PriceAmount', { currencyID: 'SAR' }).txt(baseUnitPrice.toFixed(4)).up()
+      .ele('cbc:PriceAmount', { currencyID: 'SAR' }).txt(Number(item.unit_price_excl).toFixed(4)).up()
       .up();
   });
 

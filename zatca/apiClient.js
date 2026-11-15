@@ -36,7 +36,6 @@ async function submitToZatca({ company, uuid, invoiceHash, xmlContent, docType }
         timeout: 15000
       }
     );
-
     const clearanceStatus = response.data?.clearanceStatus || response.data?.reportingStatus;
     return {
       status: clearanceStatus === 'CLEARED' || clearanceStatus === 'REPORTED' ? clearanceStatus : 'FAILED',
