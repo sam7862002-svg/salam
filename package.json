@@ -1,0 +1,18 @@
+{
+  "name": "saudi-zatca-pos",
+  "version": "1.0.0",
+  "description": "Saudi Arabia ZATCA Phase 2 Integrated Cloud POS, Sales/Purchase, Returns & VAT Return System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "pg": "^8.13.1",
+    "uuid": "^11.0.3",
+    "xmlbuilder2": "^3.1.1"
+  }
+}

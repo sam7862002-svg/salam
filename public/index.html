@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Saudi ZATCA Phase 2 POS & VAT System</title>
+  <link rel="manifest" href="/manifest.json" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #receiptModal, #receiptModal * { visibility: visible; }
+      #receiptModal { position: absolute; left: 0; top: 0; width: 80mm; box-shadow: none; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+
+  <!-- Top Navigation -->
+  <nav class="bg-emerald-800 text-white px-4 py-3 shadow-md flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-2">
+      <span class="font-bold text-lg tracking-wide">🇸🇦 ZATCA Phase 2 POS</span>
+      <span id="envBadge" class="text-xs bg-amber-500 text-black font-semibold px-2 py-0.5 rounded">SANDBOX</span>
+    </div>
+    <div class="flex flex-wrap gap-1 text-sm">
+      <button onclick="showTab('pos')" class="tab-btn bg-emerald-950 px-3 py-1.5 rounded hover:bg-emerald-700">POS / Credit Note</button>
+      <button onclick="showTab('purchase')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Purchase / Return</button>
+      <button onclick="showTab('parties')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Customers & Vendors</button>
+      <button onclick="showTab('products')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Products</button>
+      <button onclick="showTab('reports')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Register & VAT Report</button>
+      <button onclick="showTab('settings')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">ZATCA Settings</button>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto p-4">
+
+    <!-- TAB 1: POS SALES & CREDIT NOTE -->
+    <section id="tab-pos" class="tab-section grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow">
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+          <h2 class="font-bold text-lg text-emerald-800">Sales Invoice / Credit Note (ZATCA Phase 2)</h2>
+          <select id="saleDocType" onchange="toggleReturnFields()" class="border rounded px-3 py-1.5 text-sm font-semibold bg-slate-50">
+            <option value="B2C_INVOICE">B2C Simplified Tax Invoice</option>
+            <option value="B2B_INVOICE">B2B Standard Tax Invoice</option>
+            <option value="B2C_CREDIT_NOTE">B2C Sales Return (Credit Note)</option>
+            <option value="B2B_CREDIT_NOTE">B2B Sales Return (Credit Note)</option>
+          </select>
+        </div>
+
+        <div id="creditNoteFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 bg-amber-50 p-3 rounded border border-amber-300">
+          <input id="origInvRef" type="text" placeholder="Original Invoice No (e.g., INV-000001)" class="border p-2 rounded text-sm" />
+          <input id="returnReason" type="text" placeholder="Return Reason (Required by ZATCA)" class="border p-2 rounded text-sm" />
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
+          <select id="saleParty" class="border p-2 rounded text-sm"></select>
+          <select id="salePaymentMode" class="border p-2 rounded text-sm">
+            <option value="CASH">CASH</option>
+            <option value="MADA">MADA / CARD</option>
+            <option value="CREDIT">CREDIT (UDHAAR)</option>
+            <option value="BANK">BANK TRANSFER</option>
+          </select>
+          <select id="productSelect" onchange="addSelectedProductToCart()" class="border p-2 rounded text-sm bg-emerald-50">
+            <option value="">+ Select Product to Add...</option>
+          </select>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left border">
+            <thead class="bg-slate-100">
+              <tr>
+                <th class="p-2">Item (EN / AR)</th>
+                <th class="p-2 w-20">Qty</th>
+                <th class="p-2 w-28">Price</th>
+                <th class="p-2 w-20">VAT%</th>
+                <th class="p-2 w-28">Total</th>
+                <th class="p-2 w-10"></th>
+              </tr>
+            </thead>
+            <tbody id="cartBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Checkout Summary -->
+      <div class="bg-white p-4 rounded-xl shadow flex flex-col justify-between">
+        <div>
+          <h3 class="font-bold text-lg border-b pb-2 mb-3">Bill Summary</h3>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span>Subtotal (Excl. VAT):</span><span id="cartSub" class="font-semibold">0.00 SAR</span></div>
+            <div class="flex justify-between"><span>VAT (15%):</span><span id="cartVat" class="font-semibold">0.00 SAR</span></div>
+            <div class="flex justify-between text-lg font-bold text-emerald-700 border-t pt-2">
+              <span>Grand Total:</span><span id="cartTotal">0.00 SAR</span>
+            </div>
+          </div>
+        </div>
+        <button onclick="submitSale()" class="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow">
+          Generate ZATCA Invoice & Print
+        </button>
+      </div>
+    </section>
+
+    <!-- TAB 2: PURCHASE & PURCHASE RETURN -->
+    <section id="tab-purchase" class="tab-section hidden bg-white p-4 rounded-xl shadow">
+      <h2 class="font-bold text-lg text-emerald-800 mb-4">Purchase & Purchase Return Entry (Input VAT)</h2>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-4">
+        <select id="purDocType" class="border p-2 rounded text-sm">
+          <option value="PURCHASE">Purchase Invoice</option>
+          <option value="PURCHASE_RETURN">Purchase Return (Debit Note)</option>
+        </select>
+        <select id="purParty" class="border p-2 rounded text-sm"></select>
+        <input id="supInvNo" type="text" placeholder="Supplier Invoice No" class="border p-2 rounded text-sm" />
+        <select id="purPayMode" class="border p-2 rounded text-sm">
+          <option value="CASH">CASH</option>
+          <option value="CREDIT">CREDIT</option>
+          <option value="BANK">BANK</option>
+        </select>
+        <select id="purProductSelect" onchange="addProductToPurCart()" class="border p-2 rounded text-sm bg-blue-50">
+          <option value="">+ Add Product...</option>
+        </select>
+      </div>
+
+      <table class="w-full text-sm text-left border mb-4">
+        <thead class="bg-slate-100">
+          <tr>
+            <th class="p-2">Product</th>
+            <th class="p-2 w-24">Qty</th>
+            <th class="p-2 w-28">Cost Price</th>
+            <th class="p-2 w-20">VAT%</th>
+            <th class="p-2 w-28">Total</th>
+            <th class="p-2 w-10"></th>
+          </tr>
+        </thead>
+        <tbody id="purCartBody"></tbody>
+      </table>
+
+      <button onclick="submitPurchase()" class="bg-blue-700 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg">
+        Save Purchase Transaction
+      </button>
+    </section>
+
+    <!-- TAB 3: CUSTOMERS & VENDORS -->
+    <section id="tab-parties" class="tab-section hidden grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white p-4 rounded-xl shadow">
+        <h3 class="font-bold text-lg mb-3">Add Customer / Vendor</h3>
+        <div class="space-y-2 text-sm">
+          <select id="pType" class="w-full border p-2 rounded">
+            <option value="CUSTOMER">Customer</option>
+            <option value="VENDOR">Vendor / Supplier</option>
+            <option value="BOTH">Both (Customer & Vendor)</option>
+          </select>
+          <input id="pNameEn" placeholder="Name (English) *" class="w-full border p-2 rounded" />
+          <input id="pNameAr" placeholder="Name (Arabic)" class="w-full border p-2 rounded" />
+          <input id="pVat" placeholder="15-Digit VAT Number (For B2B)" class="w-full border p-2 rounded" />
+          <input id="pPhone" placeholder="Mobile Number" class="w-full border p-2 rounded" />
+          <input id="pOpening" type="number" placeholder="Opening Balance (+Receivable / -Payable)" class="w-full border p-2 rounded" />
+          <button onclick="saveParty()" class="w-full bg-emerald-600 text-white font-bold py-2 rounded">Save Party</button>
+        </div>
+
+        <h3 class="font-bold text-lg mt-6 mb-3 border-t pt-3">Record Receipt / Payment</h3>
+        <div class="space-y-2 text-sm">
+          <select id="vParty" class="w-full border p-2 rounded"></select>
+          <select id="vType" class="w-full border p-2 rounded">
+            <option value="RECEIPT">Receipt from Customer</option>
+            <option value="PAYMENT">Payment to Vendor</option>
+          </select>
+          <input id="vAmount" type="number" placeholder="Amount (SAR)" class="w-full border p-2 rounded" />
+          <input id="vNotes" placeholder="Notes / Ref" class="w-full border p-2 rounded" />
+          <button onclick="saveVoucher()" class="w-full bg-slate-800 text-white font-bold py-2 rounded">Save Voucher</button>
+        </div>
+      </div>
+
+      <div class="md:col-span-2 bg-white p-4 rounded-xl shadow overflow-x-auto">
+        <h3 class="font-bold text-lg mb-3">Parties List</h3>
+        <table class="w-full text-sm text-left border">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="p-2">Name</th>
+              <th class="p-2">Type</th>
+              <th class="p-2">VAT No</th>
+              <th class="p-2">Phone</th>
+            </tr>
+          </thead>
+          <tbody id="partiesTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 4: PRODUCTS -->
+    <section id="tab-products" class="tab-section hidden grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white p-4 rounded-xl shadow space-y-2 text-sm">
+        <h3 class="font-bold text-lg mb-2">Add New Product</h3>
+        <input id="prodBarcode" placeholder="Barcode" class="w-full border p-2 rounded" />
+        <input id="prodNameEn" placeholder="Product Name (English) *" class="w-full border p-2 rounded" />
+        <input id="prodNameAr" placeholder="Product Name (Arabic) *" class="w-full border p-2 rounded" />
+        <input id="prodCost" type="number" placeholder="Cost Price" class="w-full border p-2 rounded" />
+        <input id="prodPrice" type="number" placeholder="Selling Price (Excl. VAT) *" class="w-full border p-2 rounded" />
+        <input id="prodVat" type="number" value="15" placeholder="VAT %" class="w-full border p-2 rounded" />
+        <input id="prodStock" type="number" placeholder="Opening Stock Qty" class="w-full border p-2 rounded" />
+        <button onclick="saveProduct()" class="w-full bg-emerald-600 text-white font-bold py-2 rounded">Save Product</button>
+      </div>
+
+      <div class="md:col-span-2 bg-white p-4 rounded-xl shadow overflow-x-auto">
+        <h3 class="font-bold text-lg mb-3">Inventory & Price List</h3>
+        <table class="w-full text-sm text-left border">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="p-2">Barcode</th>
+              <th class="p-2">Name (EN / AR)</th>
+              <th class="p-2">Price</th>
+              <th class="p-2">VAT%</th>
+              <th class="p-2">Stock</th>
+            </tr>
+          </thead>
+          <tbody id="productsTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 5: CUSTOMER/VENDOR REGISTER & ZATCA VAT REPORT -->
+    <section id="tab-reports" class="tab-section hidden space-y-6">
+      <div class="bg-white p-4 rounded-xl shadow flex flex-wrap items-center gap-3">
+        <label class="text-sm font-semibold">From:</label>
+        <input id="repFrom" type="date" class="border p-1.5 rounded text-sm" />
+        <label class="text-sm font-semibold">To:</label>
+        <input id="repTo" type="date" class="border p-1.5 rounded text-sm" />
+        <button onclick="loadReports()" class="bg-emerald-700 text-white px-4 py-1.5 rounded text-sm font-bold">Generate Reports</button>
+      </div>
+
+      <!-- ZATCA VAT Return Summary Card -->
+      <div class="bg-white p-4 rounded-xl shadow">
+        <h3 class="font-bold text-lg text-emerald-800 mb-3">🇸🇦 ZATCA VAT Return Filing Summary</h3>
+        <div id="vatSummaryGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm"></div>
+      </div>
+
+      <!-- Customer & Vendor Sales/Purchase Register -->
+      <div class="bg-white p-4 rounded-xl shadow overflow-x-auto">
+        <h3 class="font-bold text-lg text-slate-800 mb-3">Customer & Vendor Sales / Purchase Register</h3>
+        <table class="w-full text-xs text-left border">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="p-2">Party Name</th>
+              <th class="p-2">Type</th>
+              <th class="p-2">VAT No</th>
+              <th class="p-2">Sales</th>
+              <th class="p-2">Sales Ret.</th>
+              <th class="p-2">Out VAT</th>
+              <th class="p-2">Purchases</th>
+              <th class="p-2">Pur. Ret.</th>
+              <th class="p-2">In VAT</th>
+              <th class="p-2">Receipts</th>
+              <th class="p-2">Payments</th>
+              <th class="p-2">Net Balance</th>
+            </tr>
+          </thead>
+          <tbody id="registerTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 6: ZATCA PHASE 2 SETTINGS -->
+    <section id="tab-settings" class="tab-section hidden bg-white p-4 rounded-xl shadow max-w-2xl mx-auto space-y-3 text-sm">
+      <h2 class="font-bold text-lg text-emerald-800">Organization & ZATCA Fatoora Phase 2 Onboarding</h2>
+      <input id="setCompEn" placeholder="Company Name (English)" class="w-full border p-2 rounded" />
+      <input id="setCompAr" placeholder="Company Name (Arabic)" class="w-full border p-2 rounded" />
+      <input id="setVat" placeholder="15-Digit VAT Registration Number" class="w-full border p-2 rounded" />
+      <input id="setCr" placeholder="CR Number" class="w-full border p-2 rounded" />
+      <input id="setAddr" placeholder="Address (Arabic)" class="w-full border p-2 rounded" />
+      <select id="setEnv" class="w-full border p-2 rounded">
+        <option value="SANDBOX">SANDBOX (Developer Portal)</option>
+        <option value="SIMULATION">SIMULATION (Fatoora Simulation)</option>
+        <option value="PRODUCTION">PRODUCTION (Live ZATCA Core)</option>
+      </select>
+      <textarea id="setCsid" rows="3" placeholder="Compliance / Production CSID (Base64)" class="w-full border p-2 rounded font-mono text-xs"></textarea>
+      <textarea id="setSecret" rows="2" placeholder="ZATCA Secret Key" class="w-full border p-2 rounded font-mono text-xs"></textarea>
+      <textarea id="setPrivKey" rows="4" placeholder="ECDSA Private Key (PEM Format)" class="w-full border p-2 rounded font-mono text-xs"></textarea>
+      <button onclick="saveSettings()" class="bg-emerald-700 text-white font-bold px-6 py-2 rounded">Save ZATCA Settings</button>
+    </section>
+
+  </main>
+
+  <!-- 80mm Thermal Receipt Modal -->
+  <div id="receiptModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-4 rounded shadow-lg w-80 text-xs font-mono">
+      <div class="text-center border-b pb-2 mb-2">
+        <div id="recCompAr" class="font-bold text-sm"></div>
+        <div id="recCompEn" class="font-bold"></div>
+        <div>VAT: <span id="recVat"></span></div>
+        <div id="recDocType" class="font-bold mt-1"></div>
+      </div>
+      <div class="mb-2">
+        <div>Inv No: <span id="recInvNo"></span> | ICV: <span id="recIcv"></span></div>
+        <div>Date: <span id="recDate"></span></div>
+        <div>ZATCA: <span id="recZatcaStatus" class="font-bold"></span></div>
+      </div>
+      <table class="w-full border-t border-b my-2 text-left">
+        <thead><tr><th>Item</th><th>Qty</th><th>Total</th></tr></thead>
+        <tbody id="recItems"></tbody>
+      </table>
+      <div class="text-right space-y-1">
+        <div>Subtotal: <span id="recSub"></span> SAR</div>
+        <div>VAT (15%): <span id="recTax"></span> SAR</div>
+        <div class="font-bold text-sm">TOTAL: <span id="recGrand"></span> SAR</div>
+      </div>
+      <div id="qrcode" class="flex justify-center my-3"></div>
+      <div class="flex gap-2 mt-3 no-print">
+        <button onclick="window.print()" class="flex-1 bg-emerald-600 text-white py-1.5 rounded font-bold">Print 80mm</button>
+        <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-slate-300 py-1.5 rounded">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
