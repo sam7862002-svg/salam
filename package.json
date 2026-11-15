@@ -1,7 +1,7 @@
 {
   "name": "saudi-zatca-pos",
-  "version": "3.0.0",
-  "description": "Saudi Arabia ZATCA Phase 2 Enterprise Cloud POS, Tax-Inclusive Pricing, Live Search, Bulk Excel, Multi-Staff, Credit Ledger, A4 PDF & WhatsApp",
+  "version": "4.0.0",
+  "description": "Saudi Arabia ZATCA Phase 2 Final Enterprise POS: Instant Print, 80mm/58mm, Auto-Login, Bank Details, Backup/Restore & Factory Reset",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

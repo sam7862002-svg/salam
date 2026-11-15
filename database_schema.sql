@@ -3,9 +3,15 @@ CREATE TABLE IF NOT EXISTS company_settings (
     id SERIAL PRIMARY KEY,
     company_name_en VARCHAR(150) NOT NULL DEFAULT 'My Retail Store',
     company_name_ar VARCHAR(150) NOT NULL DEFAULT 'متجر التجزئة',
+    shop_phone VARCHAR(30) DEFAULT '',
     vat_number VARCHAR(15) NOT NULL DEFAULT '300000000000003',
     cr_number VARCHAR(20) DEFAULT '1010000000',
     address_ar TEXT DEFAULT 'جدة، المملكة العربية السعودية',
+    bank_name VARCHAR(100) DEFAULT '',
+    bank_account_no VARCHAR(60) DEFAULT '',
+    bank_iban VARCHAR(60) DEFAULT '',
+    paper_size VARCHAR(10) DEFAULT '80mm',
+    auto_print BOOLEAN DEFAULT TRUE,
     zatca_env VARCHAR(20) DEFAULT 'SANDBOX',
     csid_certificate TEXT,
     private_key TEXT,
@@ -16,14 +22,11 @@ CREATE TABLE IF NOT EXISTS company_settings (
     last_pih TEXT DEFAULT 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ=='
 );
 
-ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS admin_pin VARCHAR(20) DEFAULT '1234';
-ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS cashier_pin VARCHAR(20) DEFAULT '0000';
-
 INSERT INTO company_settings (id, company_name_en, company_name_ar, vat_number, last_icv)
 VALUES (1, 'Saudi Retail Store', 'متجر التجزئة السعودي', '300000000000003', 0)
 ON CONFLICT (id) DO NOTHING;
 
--- 2. Staff Users Table (Multi-Staff PIN & Role)
+-- 2. Staff Users Table
 CREATE TABLE IF NOT EXISTS staff_users (
     user_id SERIAL PRIMARY KEY,
     staff_name VARCHAR(100) NOT NULL,
@@ -53,7 +56,7 @@ INSERT INTO parties (party_id, party_type, name_en, name_ar, opening_balance)
 VALUES (1, 'CUSTOMER', 'WALK-IN CASH CUSTOMER', 'عميل نقدي', 0.00)
 ON CONFLICT (party_id) DO NOTHING;
 
--- 4. Products & Inventory Master (selling_price & cost_price WITH 15% VAT included)
+-- 4. Products & Inventory Master
 CREATE TABLE IF NOT EXISTS products (
     product_id SERIAL PRIMARY KEY,
     barcode VARCHAR(50) UNIQUE,
@@ -86,14 +89,10 @@ CREATE TABLE IF NOT EXISTS sales_transactions (
     invoice_hash TEXT NOT NULL,
     qr_code_base64 TEXT NOT NULL,
     xml_content TEXT NOT NULL,
-    zatca_status VARCHAR(20) DEFAULT 'PENDING',
+    zatca_status VARCHAR(25) DEFAULT 'PENDING_REPORT',
     zatca_response JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS prev_balance NUMERIC(12, 2) DEFAULT 0.00;
-ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS new_balance NUMERIC(12, 2) DEFAULT 0.00;
-ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS created_by VARCHAR(100) DEFAULT 'Admin';
 
 -- 6. Purchase & Purchase Return (Debit Note)
 CREATE TABLE IF NOT EXISTS purchase_transactions (
@@ -110,8 +109,6 @@ CREATE TABLE IF NOT EXISTS purchase_transactions (
     grand_total NUMERIC(12, 2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-ALTER TABLE purchase_transactions ADD COLUMN IF NOT EXISTS return_reason TEXT;
 
 -- 7. Transaction Line Items
 CREATE TABLE IF NOT EXISTS transaction_items (

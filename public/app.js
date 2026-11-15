@@ -4,10 +4,12 @@ let cart = [];
 let purCart = [];
 let currentRole = 'ADMIN';
 let currentStaffName = 'Admin';
+let appSettings = {};
 let html5QrScanner = null;
 let scanTarget = 'SALE';
 let lastCompletedReceipt = null;
 let costPeekVisible = false;
+let loginInProgress = false;
 
 const RETAIL_DICT = {
   milk: 'حليب', fresh: 'طازج', water: 'ماء', juice: 'عصير', bread: 'خبز',
@@ -41,32 +43,50 @@ async function autoTranslate(text, targetInputId) {
   }).join(' ');
 }
 
+// 4-Digit Auto-Login
 async function doLogin() {
-  const pin = document.getElementById('loginPin').value;
-  const res = await fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin })
-  });
-  const data = await res.json();
-  if (data.error) return alert('Invalid Staff PIN!');
+  if (loginInProgress) return;
+  const pinInput = document.getElementById('loginPin');
+  const pin = pinInput.value;
+  if (!pin) return;
 
-  currentRole = data.role;
-  currentStaffName = data.staff_name || data.role;
-  document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole})`;
-  document.getElementById('loginScreen').classList.add('hidden');
+  loginInProgress = true;
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
+    });
+    const data = await res.json();
+    if (data.error) {
+      pinInput.value = '';
+      alert('Invalid 4-Digit PIN!');
+      pinInput.focus();
+      loginInProgress = false;
+      return;
+    }
 
-  document.querySelectorAll('.admin-only').forEach(el => {
-    if (currentRole === 'CASHIER') el.classList.add('hidden');
-    else el.classList.remove('hidden');
-  });
+    currentRole = data.role;
+    currentStaffName = data.staff_name || data.role;
+    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole})`;
+    document.getElementById('loginScreen').classList.add('hidden');
 
-  init();
+    document.querySelectorAll('.admin-only').forEach(el => {
+      if (currentRole === 'CASHIER') el.classList.add('hidden');
+      else el.classList.remove('hidden');
+    });
+
+    await init();
+  } finally {
+    loginInProgress = false;
+  }
 }
 
 function logout() {
-  document.getElementById('loginPin').value = '';
+  const pinInput = document.getElementById('loginPin');
+  pinInput.value = '';
   document.getElementById('loginScreen').classList.remove('hidden');
+  setTimeout(() => pinInput.focus(), 100);
 }
 
 async function init() {
@@ -100,7 +120,7 @@ function togglePurReturnFields() {
   else box.classList.add('hidden');
 }
 
-// --- LIVE SEARCH DROPDOWN IN BARCODE BOX ---
+// --- LIVE SEARCH DROPDOWN ---
 function showLiveSearchDropdown(query, mode) {
   const dropdownId = mode === 'SALE' ? 'posSearchDropdown' : 'purSearchDropdown';
   const box = document.getElementById(dropdownId);
@@ -352,28 +372,36 @@ function calcChange() {
 
 async function submitSale() {
   if (!cart.length) return alert('Cart is empty!');
-  const payload = {
-    party_id: Number(document.getElementById('saleParty').value),
-    doc_type: document.getElementById('saleDocType').value,
-    original_invoice_ref: document.getElementById('origInvRef').value,
-    return_reason: document.getElementById('returnReason').value,
-    payment_mode: document.getElementById('salePaymentMode').value,
-    created_by: currentStaffName,
-    items: cart
-  };
-  const res = await fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  const data = await res.json();
-  if (data.error) return alert('Error: ' + data.error);
+  const btn = document.getElementById('checkoutBtn');
+  btn.disabled = true;
+  btn.innerText = 'Processing...';
 
-  cart = [];
-  document.getElementById('cashTendered').value = '';
-  renderCart();
-  await loadProducts();
-  await loadParties();
-  showReceipt(data);
+  try {
+    const payload = {
+      party_id: Number(document.getElementById('saleParty').value),
+      doc_type: document.getElementById('saleDocType').value,
+      original_invoice_ref: document.getElementById('origInvRef').value,
+      return_reason: document.getElementById('returnReason').value,
+      payment_mode: document.getElementById('salePaymentMode').value,
+      created_by: currentStaffName,
+      items: cart
+    };
+    const res = await fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (data.error) return alert('Error: ' + data.error);
+
+    cart = [];
+    document.getElementById('cashTendered').value = '';
+    renderCart();
+    showReceipt(data, true);
+    loadProducts();
+    loadParties();
+  } finally {
+    btn.disabled = false;
+    btn.innerText = '⚡ Instant Bill & Print';
+  }
 }
 
-// --- LIVE CUSTOMER / VENDOR BALANCE DISPLAY ---
 function updatePartyLiveBalance(mode) {
   const selId = mode === 'SALE' ? 'saleParty' : 'purParty';
   const boxId = mode === 'SALE' ? 'salePartyBalanceBox' : 'purPartyBalanceBox';
@@ -392,13 +420,15 @@ function updatePartyLiveBalance(mode) {
   }
 }
 
-// --- RECEIPT, A4 PDF PRINT & WHATSAPP PDF SHARE ---
-function showReceipt(data) {
+// --- RECEIPT (80mm / 58mm), BANK DETAILS, A4 PDF PRINT & WHATSAPP PDF SHARE ---
+function showReceipt(data, isNewSale = false) {
   lastCompletedReceipt = data;
   const { sale, items, company, party } = data;
 
   document.getElementById('recCompAr').innerText = company.company_name_ar;
   document.getElementById('recCompEn').innerText = company.company_name_en;
+  document.getElementById('recAddrAr').innerText = company.address_ar || '';
+  document.getElementById('recPhone').innerText = company.shop_phone ? `Tel: ${company.shop_phone}` : '';
   document.getElementById('recVat').innerText = company.vat_number;
   document.getElementById('recDocType').innerText = sale.doc_type;
   document.getElementById('recInvNo').innerText = sale.invoice_number;
@@ -406,7 +436,6 @@ function showReceipt(data) {
   document.getElementById('recDate').innerText = new Date(sale.created_at).toLocaleString();
   document.getElementById('recParty').innerText = party ? party.name_en : 'Walk-in';
   document.getElementById('recPayMode').innerText = sale.payment_mode;
-  document.getElementById('recZatcaStatus').innerText = sale.zatca_status;
   document.getElementById('recSub').innerText = sale.subtotal;
   document.getElementById('recTax').innerText = sale.vat_amount;
   document.getElementById('recGrand').innerText = sale.grand_total;
@@ -414,18 +443,34 @@ function showReceipt(data) {
   document.getElementById('recPrevBal').innerText = Number(sale.prev_balance || 0).toFixed(2);
   document.getElementById('recNewBal').innerText = Number(sale.new_balance || 0).toFixed(2);
 
+  // Bank Details on Thermal Receipt
+  const recBankBox = document.getElementById('recBankBox');
+  if (company.bank_name || company.bank_account_no || company.bank_iban) {
+    recBankBox.classList.remove('hidden');
+    document.getElementById('recBankName').innerText = company.bank_name || '';
+    document.getElementById('recBankAcc').innerText = company.bank_account_no ? `A/C: ${company.bank_account_no}` : '';
+    document.getElementById('recBankIban').innerText = company.bank_iban ? `IBAN: ${company.bank_iban}` : '';
+  } else {
+    recBankBox.classList.add('hidden');
+  }
+
   const tbody = document.getElementById('recItems');
   tbody.innerHTML = '';
   items.forEach(i => {
     tbody.innerHTML += `<tr><td>${i.name_en}</td><td>${i.qty}</td><td>${Number(i.line_total).toFixed(2)}</td></tr>`;
   });
 
+  const is58 = (company.paper_size || appSettings.paper_size) === '58mm';
   const qrDiv = document.getElementById('qrcode');
   qrDiv.innerHTML = '';
-  new QRCode(qrDiv, { text: sale.qr_code_base64, width: 140, height: 140 });
+  new QRCode(qrDiv, { text: sale.qr_code_base64, width: is58 ? 110 : 140, height: is58 ? 110 : 140 });
 
   populateA4Template(data);
   document.getElementById('receiptModal').classList.remove('hidden');
+
+  if (isNewSale && (company.auto_print !== false)) {
+    setTimeout(() => printThermalReceipt(), 180);
+  }
 }
 
 function populateA4Template({ sale, items, company, party }) {
@@ -433,6 +478,7 @@ function populateA4Template({ sale, items, company, party }) {
   document.getElementById('a4CompAr').innerText = company.company_name_ar;
   document.getElementById('a4Vat').innerText = company.vat_number;
   document.getElementById('a4Cr').innerText = company.cr_number || '-';
+  document.getElementById('a4Phone').innerText = company.shop_phone || '-';
   document.getElementById('a4Addr').innerText = company.address_ar || '';
 
   const isCredit = sale.doc_type.includes('CREDIT_NOTE');
@@ -455,6 +501,17 @@ function populateA4Template({ sale, items, company, party }) {
     document.getElementById('a4OrigRef').innerText = sale.original_invoice_ref;
   } else {
     document.getElementById('a4OrigRefRow').classList.add('hidden');
+  }
+
+  // Bank Details on A4 PDF
+  const a4BankBox = document.getElementById('a4BankBox');
+  if (company.bank_name || company.bank_account_no || company.bank_iban) {
+    a4BankBox.classList.remove('hidden');
+    document.getElementById('a4BankName').innerText = company.bank_name || '-';
+    document.getElementById('a4BankAcc').innerText = company.bank_account_no || '-';
+    document.getElementById('a4BankIban').innerText = company.bank_iban || '-';
+  } else {
+    a4BankBox.classList.add('hidden');
   }
 
   const tbody = document.getElementById('a4ItemsBody');
@@ -480,16 +537,17 @@ function populateA4Template({ sale, items, company, party }) {
   new QRCode(a4Qr, { text: sale.qr_code_base64, width: 120, height: 120 });
 }
 
-function printThermal80() {
-  document.body.classList.remove('print-a4');
-  document.body.classList.add('print-80mm');
+function printThermalReceipt() {
+  const is58 = (appSettings.paper_size || '80mm') === '58mm';
+  document.body.classList.remove('print-a4', 'print-80mm', 'print-58mm');
+  document.body.classList.add(is58 ? 'print-58mm' : 'print-80mm');
   window.print();
 }
 
 function printA4Invoice() {
   const wrapper = document.getElementById('a4Wrapper');
   wrapper.classList.remove('hidden');
-  document.body.classList.remove('print-80mm');
+  document.body.classList.remove('print-80mm', 'print-58mm');
   document.body.classList.add('print-a4');
   window.print();
   wrapper.classList.add('hidden');
@@ -619,13 +677,15 @@ async function submitPurchase() {
   alert('Purchase / Return Transaction Saved!');
 }
 
-// --- SALES HISTORY ---
+// --- SALES HISTORY & ZATCA BATCH SYNC ---
 async function loadSalesHistory() {
   const res = await fetch('/api/sales');
   const rows = await res.json();
   const tbody = document.getElementById('historyTable');
   tbody.innerHTML = '';
   rows.forEach(s => {
+    const isSynced = s.zatca_status === 'CLEARED' || s.zatca_status === 'REPORTED';
+    const badgeClass = isSynced ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
     tbody.innerHTML += `<tr class="border-t hover:bg-slate-50">
       <td class="p-2 font-bold">${s.invoice_number}</td>
       <td class="p-2">${new Date(s.created_at).toLocaleString()}</td>
@@ -634,22 +694,33 @@ async function loadSalesHistory() {
       <td class="p-2">${s.payment_mode}</td>
       <td class="p-2 font-bold">${Number(s.grand_total).toFixed(2)}</td>
       <td class="p-2">${s.created_by || 'Admin'}</td>
-      <td class="p-2"><span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">${s.zatca_status}</span></td>
-      <td class="p-2">
-        <button onclick="reprintInvoice(${s.sale_id})" class="bg-blue-600 text-white px-2 py-1 rounded">Reprint / PDF</button>
+      <td class="p-2"><span class="px-1.5 py-0.5 rounded font-bold ${badgeClass}">${s.zatca_status}</span></td>
+      <td class="p-2 space-x-1">
+        <button onclick="reprintInvoice(${s.sale_id})" class="bg-blue-600 text-white px-2 py-1 rounded">Print / PDF</button>
+        <a href="/api/sales/${s.sale_id}/xml" class="bg-slate-700 text-white px-2 py-1 rounded inline-block">XML</a>
       </td>
     </tr>`;
   });
+}
+
+async function triggerZatcaBatchSync() {
+  const res = await fetch('/api/zatca/sync-batch', { method: 'POST' });
+  const data = await res.json();
+  if (data.error) return alert('Sync Error: ' + data.error);
+  alert(`ZATCA Z-Close Batch Sync Complete!
+Checked: ${data.total_checked || 0} | Synced: ${data.synced || 0}`);
+  loadSalesHistory();
+  if (currentRole === 'ADMIN') loadReports();
 }
 
 async function reprintInvoice(saleId) {
   const res = await fetch(`/api/sales/${saleId}`);
   const data = await res.json();
   if (data.error) return alert(data.error);
-  showReceipt(data);
+  showReceipt(data, false);
 }
 
-// --- PARTIES (EDIT, DELETE, BULK EXCEL) ---
+// --- PARTIES ---
 async function loadParties() {
   const res = await fetch('/api/parties');
   parties = await res.json();
@@ -803,7 +874,7 @@ async function saveVoucher() {
   alert('Voucher Recorded & Balance Updated!');
 }
 
-// --- PRODUCTS (EDIT, DELETE, BULK EXCEL) ---
+// --- PRODUCTS ---
 async function loadProducts() {
   const res = await fetch('/api/products');
   products = await res.json();
@@ -935,16 +1006,23 @@ function uploadProductExcel(event) {
   reader.readAsBinaryString(file);
 }
 
-// --- SETTINGS & MULTI-STAFF ---
+// --- SETTINGS, BACKUP, RESTORE & FACTORY RESET ---
 async function loadSettings() {
   const res = await fetch('/api/settings');
   const data = await res.json();
+  appSettings = data || {};
   if (data.company_name_en) {
     document.getElementById('setCompEn').value = data.company_name_en || '';
     document.getElementById('setCompAr').value = data.company_name_ar || '';
+    document.getElementById('setShopPhone').value = data.shop_phone || '';
     document.getElementById('setVat').value = data.vat_number || '';
     document.getElementById('setCr').value = data.cr_number || '';
     document.getElementById('setAddr').value = data.address_ar || '';
+    document.getElementById('setBankName').value = data.bank_name || '';
+    document.getElementById('setBankAcc').value = data.bank_account_no || '';
+    document.getElementById('setBankIban').value = data.bank_iban || '';
+    document.getElementById('setPaperSize').value = data.paper_size || '80mm';
+    document.getElementById('setAutoPrint').checked = data.auto_print !== false;
     document.getElementById('setEnv').value = data.zatca_env || 'SANDBOX';
     document.getElementById('setCsid').value = data.csid_certificate || '';
     document.getElementById('setSecret').value = data.secret_key || '';
@@ -959,9 +1037,15 @@ async function saveSettings() {
   const payload = {
     company_name_en: document.getElementById('setCompEn').value,
     company_name_ar: document.getElementById('setCompAr').value,
+    shop_phone: document.getElementById('setShopPhone').value,
     vat_number: document.getElementById('setVat').value,
     cr_number: document.getElementById('setCr').value,
     address_ar: document.getElementById('setAddr').value,
+    bank_name: document.getElementById('setBankName').value,
+    bank_account_no: document.getElementById('setBankAcc').value,
+    bank_iban: document.getElementById('setBankIban').value,
+    paper_size: document.getElementById('setPaperSize').value,
+    auto_print: document.getElementById('setAutoPrint').checked,
     zatca_env: document.getElementById('setEnv').value,
     csid_certificate: document.getElementById('setCsid').value,
     secret_key: document.getElementById('setSecret').value,
@@ -970,10 +1054,57 @@ async function saveSettings() {
     cashier_pin: document.getElementById('setCashierPin').value
   };
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  alert('Settings Saved!');
+  alert('All Settings Saved!');
   loadSettings();
 }
 
+function downloadFullBackup() {
+  window.location.href = '/api/system/backup';
+}
+
+function restoreFullBackup(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!confirm('Restoring backup will overwrite current database records with the backup file. Continue?')) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const jsonObj = JSON.parse(e.target.result);
+      const res = await fetch('/api/system/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonObj)
+      });
+      const out = await res.json();
+      if (out.error) return alert('Restore Failed: ' + out.error);
+      alert('Full Backup Restored Successfully!');
+      init();
+    } catch (err) {
+      alert('Invalid JSON backup file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function resetTransactions(keepMasterData) {
+  const msg = keepMasterData
+    ? 'RESET BILLS ONLY: All test invoices, purchases, vouchers, and balances will be cleared to ZERO (Products & Customers will remain). Are you sure?'
+    : 'FULL FACTORY WIPE: ALL bills, purchases, products, and customers will be wiped to ZERO! Please download a backup first. Continue?';
+  if (!confirm(msg)) return;
+
+  const res = await fetch('/api/system/reset-transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keepMasterData })
+  });
+  const out = await res.json();
+  if (out.error) return alert('Reset Failed: ' + out.error);
+  alert('System Reset Complete! All counters and balances are now ZERO.');
+  init();
+}
+
+// --- MULTI-STAFF ---
 async function loadStaffUsers() {
   const res = await fetch('/api/staff');
   const list = await res.json();
@@ -995,7 +1126,7 @@ async function addStaffUser() {
     role: document.getElementById('newStaffRole').value,
     pin: document.getElementById('newStaffPin').value
   };
-  if (!payload.staff_name || !payload.pin) return alert('Name & PIN required');
+  if (!payload.staff_name || payload.pin.length !== 4) return alert('Enter Staff Name & 4-Digit PIN');
   const res = await fetch('/api/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await res.json();
   if (data.error) return alert(data.error);
@@ -1017,6 +1148,8 @@ async function loadReports() {
 
   const vatRes = await fetch('/api/reports/vat-return' + qs);
   const vat = await vatRes.json();
+
+  document.getElementById('pendingSyncCount').innerText = vat.sales?.pending_zatca_count || 0;
 
   document.getElementById('vatSummaryGrid').innerHTML = `
     <div class="p-3 bg-emerald-50 rounded border border-emerald-200">
