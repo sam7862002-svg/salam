@@ -12,777 +12,173 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <style>
-    @media print {
-      body * { visibility: hidden; }
-      body.print-80mm #receiptModal, body.print-80mm #receiptModal * { visibility: visible; }
-      body.print-80mm #receiptModal { position: absolute; left: 0; top: 0; width: 80mm; box-shadow: none; background: white; padding: 0; }
-      body.print-80mm #receiptBox { width: 76mm !important; padding: 4px !important; box-shadow: none !important; }
-
-      body.print-58mm #receiptModal, body.print-58mm #receiptModal * { visibility: visible; }
-      body.print-58mm #receiptModal { position: absolute; left: 0; top: 0; width: 58mm; box-shadow: none; background: white; padding: 0; }
-      body.print-58mm #receiptBox { width: 52mm !important; font-size: 10px !important; padding: 2px !important; box-shadow: none !important; }
-
-      body.print-a4 #a4InvoiceContainer, body.print-a4 #a4InvoiceContainer * { visibility: visible; }
-      body.print-a4 #a4InvoiceContainer { position: absolute; left: 0; top: 0; width: 210mm; background: white; }
-      .no-print { display: none !important; }
-    }
-    @keyframes scanLine {
-      0% { top: 15%; }
-      50% { top: 82%; }
-      100% { top: 15%; }
-    }
-    .laser-line {
-      position: absolute;
-      left: 8%;
-      right: 8%;
-      height: 3px;
-      background: #ef4444;
-      box-shadow: 0 0 12px #ef4444, 0 0 24px #dc2626;
-      animation: scanLine 1.6s infinite ease-in-out;
-      z-index: 30;
-      pointer-events: none;
-    }
-    #qrcode img, #qrcode canvas, #a4QrCode img, #a4QrCode canvas {
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-      background: #ffffff;
-      padding: 6px;
-      border: 1px solid #e2e8f0;
-      margin: 0 auto;
-    }
-  </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
-
-  <!-- PERSISTENT LOGIN OVERLAY -->
+  <!-- LOGIN OVERLAY -->
   <div id="loginScreen" class="fixed inset-0 bg-slate-900/95 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center space-y-4">
       <div class="text-3xl">🇸🇦</div>
       <h1 class="font-bold text-xl text-emerald-800" data-i18n="login_title">ZATCA Phase 2 POS</h1>
-      <p class="text-xs text-slate-500" data-i18n="login_sub">Enter 4-Digit PIN (Auto-Unlocks on 4th Digit)</p>
+      <p class="text-xs text-slate-500" data-i18n="login_sub">Enter 4-Digit PIN</p>
       <input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autofocus
              oninput="if(this.value.length === 4) doLogin()"
              onkeydown="if(event.key==='Enter') doLogin()"
              class="w-full border-2 border-emerald-600 rounded-xl p-3 text-center text-3xl tracking-[0.6em] font-bold" />
-      <button onclick="doLogin()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow text-sm" data-i18n="login_btn">
-        Unlock POS
-      </button>
+      <button onclick="doLogin()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow text-sm">Unlock POS</button>
     </div>
   </div>
 
-  <!-- Top Navigation -->
+  <!-- NAVIGATION -->
   <nav class="bg-emerald-800 text-white px-4 py-3 shadow-md flex flex-wrap items-center justify-between gap-2">
     <div class="flex items-center gap-2">
-      <span class="font-bold text-lg tracking-wide">🇸🇦 ZATCA Phase 2 POS</span>
+      <span class="font-bold text-lg">🇸🇦 ZATCA POS</span>
       <span id="envBadge" class="text-xs bg-amber-500 text-black font-semibold px-2 py-0.5 rounded">SANDBOX</span>
       <span id="roleBadge" class="text-xs bg-emerald-950 text-emerald-200 px-2 py-0.5 rounded">ADMIN</span>
-      <span id="offlineBadge" class="hidden text-xs bg-red-600 text-white px-2 py-0.5 rounded font-bold">OFFLINE MODE</span>
     </div>
     <div class="flex flex-wrap items-center gap-1 text-sm">
       <button onclick="toggleLanguage()" class="bg-amber-400 hover:bg-amber-500 text-black font-bold px-2.5 py-1.5 rounded text-xs" id="langToggleBtn">العربية 🇸🇦</button>
-      <button onclick="showTab('pos')" data-i18n="tab_pos" class="tab-btn bg-emerald-950 px-3 py-1.5 rounded hover:bg-emerald-700">POS / Credit Note</button>
-      <button onclick="showTab('purchase')" data-i18n="tab_purchase" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Purchase / Return</button>
-      <button onclick="showTab('history')" data-i18n="tab_history" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Bills History</button>
-      <button onclick="showTab('parties')" data-i18n="tab_parties" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Customers & Vendors</button>
-      <button onclick="showTab('products')" data-i18n="tab_products" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Products</button>
-      <button onclick="showTab('reports')" data-i18n="tab_reports" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">VAT & Z-Close</button>
-      <button onclick="showTab('settings')" data-i18n="tab_settings" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Settings & Backup</button>
-      <button onclick="explicitLogout()" data-i18n="btn_lock" class="px-2 py-1.5 rounded bg-red-700 hover:bg-red-800 text-xs">Lock</button>
+      <button onclick="showTab('pos')" class="tab-btn bg-emerald-950 px-3 py-1.5 rounded">POS</button>
+      <button onclick="showTab('purchase')" class="tab-btn admin-only px-3 py-1.5 rounded">Purchase</button>
+      <button onclick="showTab('history')" class="tab-btn px-3 py-1.5 rounded">History</button>
+      <button onclick="showTab('parties')" class="tab-btn px-3 py-1.5 rounded">Parties</button>
+      <button onclick="showTab('products')" class="tab-btn admin-only px-3 py-1.5 rounded">Products</button>
+      <button onclick="showTab('reports')" class="tab-btn admin-only px-3 py-1.5 rounded">Reports</button>
+      <button onclick="showTab('settings')" class="tab-btn admin-only px-3 py-1.5 rounded">Settings</button>
+      <button onclick="explicitLogout()" class="px-2 py-1.5 rounded bg-red-700 text-xs">Lock</button>
     </div>
   </nav>
 
   <main class="max-w-7xl mx-auto p-4">
-
-    <!-- TAB 1: POS SALES & CREDIT NOTE -->
+    <!-- TAB 1: POS -->
     <section id="tab-pos" class="tab-section grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow">
-        <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-          <div class="flex items-center gap-2">
-            <h2 class="font-bold text-lg text-emerald-800" data-i18n="sales_heading">Sales / Credit Note</h2>
-            <select id="quickPrintToggle" class="border border-emerald-600 text-emerald-900 rounded px-2 py-1 text-xs font-bold bg-emerald-50">
-              <option value="AUTO">🖨️ Auto Route (B2C→Thermal | B2B→A4)</option>
-              <option value="THERMAL">🖨️ Force Thermal (80/58mm)</option>
-              <option value="A4">📄 Force A4 PDF</option>
-            </select>
-          </div>
-          <select id="saleDocType" onchange="toggleReturnFields()" class="border rounded px-3 py-1.5 text-sm font-semibold bg-slate-50">
-            <option value="B2C_INVOICE" data-i18n="b2c_inv">B2C Simplified Tax Invoice</option>
-            <option value="B2B_INVOICE" data-i18n="b2b_inv">B2B Standard Tax Invoice</option>
-            <option value="B2C_CREDIT_NOTE" data-i18n="b2c_cn">B2C Sales Return (Credit Note)</option>
-            <option value="B2B_CREDIT_NOTE" data-i18n="b2b_cn">B2B Sales Return (Credit Note)</option>
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-bold text-lg text-emerald-800">Sales / Credit Note</h2>
+          <select id="saleDocType" onchange="toggleReturnFields()" class="border rounded px-3 py-1.5 text-sm font-semibold">
+            <option value="B2C_INVOICE">B2C Simplified Tax Invoice</option>
+            <option value="B2B_INVOICE">B2B Standard Tax Invoice</option>
+            <option value="B2C_CREDIT_NOTE">B2C Sales Return</option>
+            <option value="B2B_CREDIT_NOTE">B2B Sales Return</option>
           </select>
         </div>
-
-        <div id="creditNoteFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 bg-amber-50 p-3 rounded border border-amber-300">
-          <input id="origInvRef" type="text" placeholder="Original Invoice No (e.g., INV-000001)" class="border p-2 rounded text-sm" />
-          <input id="returnReason" type="text" placeholder="Return Reason (Required by ZATCA)" class="border p-2 rounded text-sm" />
+        <div id="creditNoteFields" class="hidden grid grid-cols-2 gap-2 mb-3 bg-amber-50 p-3 rounded border border-amber-300">
+          <input id="origInvRef" type="text" placeholder="Original Invoice No" class="border p-2 rounded text-sm" />
+          <input id="returnReason" type="text" placeholder="Return Reason" class="border p-2 rounded text-sm" />
         </div>
-
-        <!-- Unified Barcode Scan & Live Search Dropdown -->
         <div class="relative flex gap-2 mb-3">
-          <div class="relative flex-1">
-            <input id="posBarcodeInput" type="text" autocomplete="off"
-                   placeholder="Scan Barcode OR Type Item Name to Search..."
-                   oninput="showLiveSearchDropdown(this.value, 'SALE')"
-                   onkeydown="if(event.key==='Enter'){ hideDropdowns(); handleBarcodeScan(this.value, 'SALE'); }"
-                   class="w-full border-2 border-emerald-600 p-2 rounded-lg text-sm font-semibold uppercase" />
-            <div id="posSearchDropdown" class="hidden absolute left-0 right-0 top-11 bg-white border border-slate-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-40"></div>
-          </div>
-          <button onclick="openCameraScanner('SALE')" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 shadow">
-            📷 Scan
-          </button>
+          <input id="posBarcodeInput" type="text" autocomplete="off" placeholder="Scan Barcode or Search Item..."
+                 oninput="showLiveSearchDropdown(this.value, 'SALE')"
+                 onkeydown="if(event.key==='Enter'){ hideDropdowns(); handleBarcodeScan(this.value, 'SALE'); }"
+                 class="w-full border-2 border-emerald-600 p-2 rounded-lg text-sm font-semibold uppercase" />
+          <div id="posSearchDropdown" class="hidden absolute left-0 right-0 top-11 bg-white border border-slate-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-40"></div>
         </div>
-
-        <!-- Customer Selection + Live Balance Banner -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+        <div class="grid grid-cols-2 gap-2 mb-3">
           <div>
             <select id="saleParty" onchange="onPartySelectionChange('SALE')" class="w-full border p-2 rounded text-sm font-semibold"></select>
-            <div id="salePartyBalanceBox" class="text-xs mt-1 font-bold text-slate-600 px-1">Balance: 0.00 SAR</div>
+            <div id="salePartyBalanceBox" class="text-xs mt-1 font-bold text-slate-600">Balance: 0.00 SAR</div>
           </div>
-          <div>
-            <select id="salePaymentMode" class="w-full border p-2 rounded text-sm font-semibold">
-              <option value="CASH">CASH</option>
-              <option value="MADA">MADA / CARD</option>
-              <option value="CREDIT">CREDIT (UDHAAR)</option>
-              <option value="BANK">BANK TRANSFER</option>
-            </select>
-          </div>
+          <select id="salePaymentMode" class="w-full border p-2 rounded text-sm font-semibold">
+            <option value="CASH">CASH</option>
+            <option value="MADA">MADA / CARD</option>
+            <option value="CREDIT">CREDIT</option>
+            <option value="BANK">BANK</option>
+          </select>
         </div>
-
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm text-left border">
-            <thead class="bg-slate-100">
-              <tr>
-                <th class="p-2" data-i18n="th_item">Item (EN / AR)</th>
-                <th class="p-2 w-20" data-i18n="th_qty">Qty</th>
-                <th class="p-2 w-28" data-i18n="th_price">Price (Incl.)</th>
-                <th class="p-2 w-20">VAT%</th>
-                <th class="p-2 w-28" data-i18n="th_total">Total</th>
-                <th class="p-2 w-10"></th>
-              </tr>
-            </thead>
-            <tbody id="cartBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Checkout Summary & Expandable Discreet Cost -->
-      <div class="bg-white p-4 rounded-xl shadow flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-center border-b pb-2 mb-3">
-            <h3 class="font-bold text-lg" data-i18n="bill_summary">Bill Summary</h3>
-            <div id="discreetCostBox" onclick="toggleCostPeek()" title="Click to Peek Total Cost"
-                 class="text-xs font-mono font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg cursor-pointer select-none transition-all">
-              COST: <span id="discreetCostVal">•</span>
-            </div>
-          </div>
-          <div class="space-y-2 text-sm">
-            <div class="flex justify-between"><span data-i18n="base_amt">Base Amount (Excl. VAT):</span><span id="cartSub" class="font-semibold">0.00 SAR</span></div>
-            <div class="flex justify-between"><span data-i18n="vat_incl">VAT (15% Included):</span><span id="cartVat" class="font-semibold">0.00 SAR</span></div>
-            <div class="flex justify-between text-xl font-extrabold text-emerald-700 border-t pt-2">
-              <span data-i18n="grand_tot">Grand Total:</span><span id="cartTotal">0.00 SAR</span>
-            </div>
-
-            <div class="pt-3 border-t mt-3 space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <label class="text-xs font-semibold text-slate-600" data-i18n="cash_rec">Cash Received:</label>
-                <input id="cashTendered" type="number" placeholder="0.00" oninput="calcChange()"
-                       class="w-32 border p-1.5 rounded text-right font-bold text-sm" />
-              </div>
-              <div class="flex justify-between text-sm font-bold text-blue-700">
-                <span data-i18n="change_due">Balance / Change:</span><span id="cashChange">0.00 SAR</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <button id="checkoutBtn" onclick="submitSale()" class="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl shadow-lg text-base" data-i18n="btn_checkout">
-          ⚡ Instant Bill & Print
-        </button>
-      </div>
-    </section>
-
-    <!-- TAB 2: PURCHASE & PURCHASE RETURN -->
-    <section id="tab-purchase" class="tab-section hidden bg-white p-4 rounded-xl shadow space-y-4">
-      <div class="flex flex-wrap justify-between items-center gap-2">
-        <h2 class="font-bold text-lg text-blue-800" data-i18n="purchase_heading">Purchase & Purchase Return (Enter Unit Cost Excl. VAT)</h2>
-        <select id="purDocType" onchange="togglePurReturnFields()" class="border rounded px-3 py-1.5 text-sm font-semibold bg-blue-50">
-          <option value="PURCHASE" data-i18n="pur_inv">Purchase Invoice</option>
-          <option value="PURCHASE_RETURN" data-i18n="pur_ret">Purchase Return (Debit Note)</option>
-        </select>
-      </div>
-
-      <div id="purReturnFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-2 bg-amber-50 p-3 rounded border border-amber-300">
-        <input id="origPurRef" type="text" placeholder="Original Purchase Voucher / Supplier Inv No" class="border p-2 rounded text-sm" />
-        <input id="purReturnReason" type="text" placeholder="Purchase Return Reason" class="border p-2 rounded text-sm" />
-      </div>
-
-      <div class="relative flex gap-2">
-        <div class="relative flex-1">
-          <input id="purBarcodeInput" type="text" autocomplete="off"
-                 placeholder="Scan Barcode OR Type Item Name for Purchase / Return..."
-                 oninput="showLiveSearchDropdown(this.value, 'PURCHASE')"
-                 onkeydown="if(event.key==='Enter'){ hideDropdowns(); handleBarcodeScan(this.value, 'PURCHASE'); }"
-                 class="w-full border-2 border-blue-600 p-2 rounded-lg text-sm font-semibold uppercase" />
-          <div id="purSearchDropdown" class="hidden absolute left-0 right-0 top-11 bg-white border border-slate-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-40"></div>
-        </div>
-        <button onclick="openCameraScanner('PURCHASE')" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 shadow">
-          📷 Scan
-        </button>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <div>
-          <select id="purParty" onchange="onPartySelectionChange('PURCHASE')" class="w-full border p-2 rounded text-sm font-semibold"></select>
-          <div id="purPartyBalanceBox" class="text-xs mt-1 font-bold text-slate-600 px-1">Balance: 0.00 SAR</div>
-        </div>
-        <input id="supInvNo" type="text" placeholder="Supplier Invoice / Ref No *" class="border p-2 rounded text-sm h-10" />
-        <select id="purPayMode" class="border p-2 rounded text-sm h-10 font-semibold">
-          <option value="CASH">CASH</option>
-          <option value="MADA">MADA / CARD</option>
-          <option value="CREDIT">CREDIT (PAYABLE)</option>
-          <option value="BANK">BANK TRANSFER</option>
-        </select>
-      </div>
-
-      <div class="overflow-x-auto">
         <table class="w-full text-sm text-left border">
           <thead class="bg-slate-100">
             <tr>
-              <th class="p-2" data-i18n="th_item">Product (EN / AR)</th>
-              <th class="p-2 w-24" data-i18n="th_qty">Qty</th>
-              <th class="p-2 w-36">Unit Cost (Excl. VAT)</th>
+              <th class="p-2">Item</th>
+              <th class="p-2 w-20">Qty</th>
+              <th class="p-2 w-28">Price</th>
               <th class="p-2 w-20">VAT%</th>
-              <th class="p-2 w-32" data-i18n="th_total">Total (Incl. VAT)</th>
+              <th class="p-2 w-28">Total</th>
               <th class="p-2 w-10"></th>
             </tr>
           </thead>
-          <tbody id="purCartBody"></tbody>
+          <tbody id="cartBody"></tbody>
         </table>
       </div>
-
-      <div class="flex flex-wrap justify-between items-center bg-slate-50 p-3 rounded-lg border">
-        <div class="text-sm space-x-4">
-          <span>Base Cost: <strong id="purSub">0.00</strong> SAR</span>
-          <span>Input VAT (15%): <strong id="purVat">0.00</strong> SAR</span>
-          <span class="text-base font-bold text-blue-800">Grand Total: <span id="purTotal">0.00</span> SAR</span>
-        </div>
-        <button onclick="submitPurchase()" class="bg-blue-700 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg shadow">
-          Save Purchase / Return
-        </button>
-      </div>
-    </section>
-
-    <!-- TAB 3: BILLS HISTORY & REPRINT -->
-    <section id="tab-history" class="tab-section hidden bg-white p-4 rounded-xl shadow overflow-x-auto">
-      <div class="flex justify-between items-center mb-3">
-        <h2 class="font-bold text-lg text-emerald-800" data-i18n="history_heading">Recent ZATCA Invoices & Credit Notes</h2>
-        <div class="flex gap-2">
-          <button onclick="triggerZatcaBatchSync()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold" data-i18n="btn_sync_zatca">
-            🔄 Sync Pending to ZATCA
-          </button>
-          <button onclick="loadSalesHistory()" class="bg-slate-200 px-3 py-1 rounded text-xs font-bold" data-i18n="btn_refresh">Refresh</button>
-        </div>
-      </div>
-      <table class="w-full text-xs text-left border">
-        <thead class="bg-slate-100">
-          <tr>
-            <th class="p-2" data-i18n="th_inv">Invoice No</th>
-            <th class="p-2" data-i18n="th_date">Date</th>
-            <th class="p-2" data-i18n="th_type">Type</th>
-            <th class="p-2" data-i18n="th_customer">Customer</th>
-            <th class="p-2" data-i18n="th_mode">Mode</th>
-            <th class="p-2" data-i18n="th_total">Total (Incl. VAT)</th>
-            <th class="p-2" data-i18n="th_staff">Staff</th>
-            <th class="p-2" data-i18n="th_zatca">ZATCA Status</th>
-            <th class="p-2" data-i18n="th_actions">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="historyTable"></tbody>
-      </table>
-    </section>
-
-    <!-- TAB 4: CUSTOMERS & VENDORS -->
-    <section id="tab-parties" class="tab-section hidden grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-white p-4 rounded-xl shadow space-y-4">
-        <div class="space-y-2 text-sm">
-          <h3 id="partyFormTitle" class="font-bold text-lg text-emerald-800" data-i18n="parties_heading">Add Customer / Vendor</h3>
-          <input type="hidden" id="editPartyId" value="" />
-          <div class="grid grid-cols-2 gap-2">
-            <select id="pType" onchange="onPartyTypeChange(this.value)" class="border p-2 rounded">
-              <option value="CUSTOMER">Customer</option>
-              <option value="VENDOR">Vendor / Supplier</option>
-              <option value="BOTH">Both</option>
-            </select>
-            <select id="pAccountMode" class="border p-2 rounded font-semibold text-emerald-800 bg-emerald-50">
-              <option value="CREDIT">Credit Party (Udhaar)</option>
-              <option value="CASH">Cash Party Only</option>
-            </select>
-          </div>
-          <input id="pNameEn" placeholder="Name (English - Auto CAPS) *"
-                 oninput="this.value=this.value.toUpperCase()"
-                 onblur="autoTranslate(this.value, 'pNameAr')" class="w-full border p-2 rounded uppercase" />
-          <input id="pNameAr" placeholder="Name (Arabic - Auto)" class="w-full border p-2 rounded bg-emerald-50/40" />
-          <input id="pVat" placeholder="15-Digit VAT Number (For B2B)" class="w-full border p-2 rounded" />
-          <input id="pPhone" placeholder="Mobile Number (e.g., 9665XXXXXXXX)" class="w-full border p-2 rounded" />
-          <div class="grid grid-cols-2 gap-2">
-            <select id="pBalType" class="border p-2 rounded text-xs font-semibold">
-              <option value="RECEIVABLE">Receivable (+)</option>
-              <option value="PAYABLE">Payable (-)</option>
-            </select>
-            <input id="pOpening" type="number" placeholder="Opening Bal (SAR)" class="border p-2 rounded" />
-          </div>
-          <div class="flex gap-2">
-            <button onclick="saveParty()" class="flex-1 bg-emerald-600 text-white font-bold py-2 rounded" data-i18n="btn_save_party">Save Party</button>
-            <button id="cancelPartyEditBtn" onclick="resetPartyForm()" class="hidden px-3 bg-slate-300 rounded" data-i18n="btn_cancel">Cancel</button>
-          </div>
-        </div>
-
-        <div class="border-t pt-3 space-y-2 text-xs">
-          <h4 class="font-bold text-slate-700">Bulk Customers / Vendors Excel</h4>
-          <div class="flex gap-2">
-            <button onclick="downloadPartyTemplate()" class="flex-1 bg-slate-200 hover:bg-slate-300 py-1.5 rounded font-semibold">📥 Sample Excel</button>
-            <label class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded font-semibold text-center cursor-pointer">
-              📤 Upload Excel
-              <input type="file" accept=".xlsx,.xls,.csv" onchange="uploadPartyExcel(event)" class="hidden" />
-            </label>
-          </div>
-        </div>
-
-        <div class="space-y-2 text-sm border-t pt-3">
-          <h3 class="font-bold text-lg" data-i18n="voucher_heading">Record Receipt / Payment Voucher</h3>
-          <select id="vParty" class="w-full border p-2 rounded"></select>
-          <select id="vType" class="w-full border p-2 rounded">
-            <option value="RECEIPT">Receipt from Customer (Reduces Due)</option>
-            <option value="PAYMENT">Payment to Vendor (Reduces Payable)</option>
-          </select>
-          <input id="vAmount" type="number" placeholder="Amount (SAR)" class="w-full border p-2 rounded" />
-          <input id="vNotes" placeholder="Notes / Ref" class="w-full border p-2 rounded" />
-          <button onclick="saveVoucher()" class="w-full bg-slate-800 text-white font-bold py-2 rounded" data-i18n="btn_save_voucher">Save & Print Voucher</button>
-        </div>
-      </div>
-
-      <div class="md:col-span-2 bg-white p-4 rounded-xl shadow overflow-x-auto">
-        <h3 class="font-bold text-lg mb-3" data-i18n="parties_list">Customers & Vendors List (Live Balance)</h3>
-        <table class="w-full text-xs text-left border">
-          <thead class="bg-slate-100">
-            <tr>
-              <th class="p-2" data-i18n="th_name">Name (EN / AR)</th>
-              <th class="p-2">Type / Mode</th>
-              <th class="p-2">VAT No</th>
-              <th class="p-2" data-i18n="th_phone">Phone</th>
-              <th class="p-2">Live Balance</th>
-              <th class="p-2" data-i18n="th_actions">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="partiesTable"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- TAB 5: PRODUCTS -->
-    <section id="tab-products" class="tab-section hidden grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
-        <h3 id="prodFormTitle" class="font-bold text-lg text-emerald-800" data-i18n="product_heading">Add / Update Product</h3>
-        <input type="hidden" id="editProdId" value="" />
-        <div class="flex gap-1">
-          <input id="prodBarcode" placeholder="Scan Barcode here..." onkeydown="if(event.key==='Enter') checkProductBarcode(this.value)" class="flex-1 border p-2 rounded" />
-          <button onclick="openCameraScanner('PRODUCT_FORM')" class="bg-red-600 text-white px-3 rounded font-bold">📷</button>
-        </div>
-        <input id="prodNameEn" placeholder="Product Name (AUTO ALL CAPS) *"
-               oninput="this.value=this.value.toUpperCase()"
-               onblur="autoTranslate(this.value, 'prodNameAr')" class="w-full border p-2 rounded uppercase font-semibold" />
-        <input id="prodNameAr" placeholder="Product Name (Arabic - Auto) *" class="w-full border p-2 rounded bg-emerald-50/40" />
-        <input id="prodCost" type="number" step="any" placeholder="Cost Price (With 15% VAT)" class="w-full border p-2 rounded" />
-        <input id="prodPrice" type="number" step="any" placeholder="Selling Price (WITH 15% VAT) *" class="w-full border p-2 rounded font-bold border-emerald-500" />
-        <div class="grid grid-cols-2 gap-2">
-          <input id="prodVat" type="number" value="15" placeholder="VAT %" class="border p-2 rounded" />
-          <input id="prodStock" type="number" step="any" placeholder="Stock Qty / Add Qty" class="border p-2 rounded bg-emerald-50 font-bold" />
-        </div>
-        <div class="flex gap-2">
-          <button onclick="saveProduct()" class="flex-1 bg-emerald-600 text-white font-bold py-2 rounded" data-i18n="btn_save_prod">Save Product</button>
-          <button id="cancelProdEditBtn" onclick="resetProductForm()" class="hidden px-3 bg-slate-300 rounded" data-i18n="btn_cancel">Cancel</button>
-        </div>
-
-        <div class="border-t pt-3 space-y-2 text-xs">
-          <h4 class="font-bold text-slate-700">Bulk Product Excel Import</h4>
-          <div class="flex gap-2">
-            <button onclick="downloadProductTemplate()" class="flex-1 bg-slate-200 hover:bg-slate-300 py-2 rounded font-bold">
-              📥 Download Excel
-            </button>
-            <label class="flex-1 bg-blue-700 hover:bg-blue-800 text-white py-2 rounded font-bold text-center cursor-pointer">
-              📤 Upload Excel
-              <input type="file" accept=".xlsx,.xls,.csv" onchange="uploadProductExcel(event)" class="hidden" />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="md:col-span-2 bg-white p-4 rounded-xl shadow overflow-x-auto">
-        <div class="flex justify-between items-center mb-3">
-          <h3 class="font-bold text-lg" data-i18n="inventory_heading">Inventory & Price List (Prices Incl. 15% VAT)</h3>
-          <input type="text" placeholder="Filter items..." oninput="filterProductsTable(this.value)" class="border p-1.5 rounded text-xs w-48" />
-        </div>
-        <table class="w-full text-xs text-left border">
-          <thead class="bg-slate-100">
-            <tr>
-              <th class="p-2">Barcode</th>
-              <th class="p-2" data-i18n="th_name">Name (EN / AR)</th>
-              <th class="p-2">Selling (Incl.)</th>
-              <th class="p-2">Base (Excl.)</th>
-              <th class="p-2">Stock</th>
-              <th class="p-2" data-i18n="th_actions">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="productsTable"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- TAB 6: VAT REPORT (QUARTERS, MONTHS, CUSTOM DATES) & Z-CLOSE -->
-    <section id="tab-reports" class="tab-section hidden space-y-6">
-      <div class="bg-white p-4 rounded-xl shadow space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="font-bold text-base text-emerald-900" data-i18n="reports_heading">VAT Return & Sales Register Filters</h3>
-          <div class="flex flex-wrap items-center gap-1.5 text-xs">
-            <select id="monthSelector" onchange="setMonthFilter(this.value)" class="border p-1 rounded font-semibold bg-emerald-50 text-emerald-900">
-              <option value="">📅 Select Month...</option>
-              <option value="01">January (01)</option>
-              <option value="02">February (02)</option>
-              <option value="03">March (03)</option>
-              <option value="04">April (04)</option>
-              <option value="05">May (05)</option>
-              <option value="06">June (06)</option>
-              <option value="07">July (07)</option>
-              <option value="08">August (08)</option>
-              <option value="09">September (09)</option>
-              <option value="10">October (10)</option>
-              <option value="11">November (11)</option>
-              <option value="12">December (12)</option>
-            </select>
-            <button onclick="setVatFilter('CURRENT_MONTH')" class="bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded font-semibold">Current Month</button>
-            <button onclick="setVatFilter('Q1')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2 py-1 rounded font-bold">Q1</button>
-            <button onclick="setVatFilter('Q2')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q2</button>
-            <button onclick="setVatFilter('Q3')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q3</button>
-            <button onclick="setVatFilter('Q4')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q4</button>
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t">
-          <div class="flex flex-wrap items-center gap-2">
-            <label class="text-xs font-semibold">From:</label>
-            <input id="repFrom" type="date" class="border p-1.5 rounded text-xs" />
-            <label class="text-xs font-semibold">To:</label>
-            <input id="repTo" type="date" class="border p-1.5 rounded text-xs" />
-            <button onclick="loadReports()" class="bg-emerald-700 text-white px-4 py-1.5 rounded text-xs font-bold">Apply Filter</button>
-          </div>
-
-          <div class="flex flex-wrap gap-1.5 text-xs">
-            <button onclick="triggerZatcaBatchSync()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold">
-              🔒 Daily Z-Close & Sync ZATCA (<span id="pendingSyncCount">0</span>)
-            </button>
-            <button onclick="exportSeparateExcel('SALES')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Sales Excel</button>
-            <button onclick="exportSeparateExcel('SALES_RETURN')" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Return Excel</button>
-            <button onclick="exportSeparateExcel('PURCHASE')" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Purchase Excel</button>
-            <button onclick="exportSeparateExcel('PURCHASE_RETURN')" class="bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Pur. Return Excel</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white p-4 rounded-xl shadow space-y-4">
-        <h3 class="font-bold text-lg text-emerald-800">🇸🇦 ZATCA VAT Return Filing Summary & Payment Breakdown</h3>
-        <div id="vatSummaryGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm"></div>
-        <div id="paymentBreakdown" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-2 border-t"></div>
-      </div>
-
-      <div class="bg-white p-4 rounded-xl shadow overflow-x-auto">
-        <h3 class="font-bold text-lg text-slate-800 mb-3">Customer & Vendor Sales / Purchase Register</h3>
-        <table class="w-full text-xs text-left border">
-          <thead class="bg-slate-100">
-            <tr>
-              <th class="p-2">Party Name</th>
-              <th class="p-2">Type</th>
-              <th class="p-2">VAT No</th>
-              <th class="p-2">Sales</th>
-              <th class="p-2">Sales Ret.</th>
-              <th class="p-2">Out VAT</th>
-              <th class="p-2">Purchases</th>
-              <th class="p-2">Pur. Ret.</th>
-              <th class="p-2">In VAT</th>
-              <th class="p-2">Receipts</th>
-              <th class="p-2">Payments</th>
-              <th class="p-2">Net Balance</th>
-            </tr>
-          </thead>
-          <tbody id="registerTable"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- TAB 7: SETTINGS, NATIONAL ADDRESS, BANK DETAILS, BACKUP & MASTER RESET LOCK -->
-    <section id="tab-settings" class="tab-section hidden grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
-        <h2 class="font-bold text-lg text-emerald-800" data-i18n="settings_heading">Shop Info, ZATCA National Address & Bank Details</h2>
-        <div class="grid grid-cols-2 gap-2">
-          <input id="setCompEn" placeholder="Shop Name (English)" onblur="autoTranslate(this.value, 'setCompAr')" class="border p-2 rounded" />
-          <input id="setCompAr" placeholder="Shop Name (Arabic)" class="border p-2 rounded" />
-          <input id="setShopPhone" placeholder="Shop WhatsApp / Mobile No" class="border p-2 rounded" />
-          <input id="setVat" placeholder="15-Digit VAT Number" class="border p-2 rounded" />
-          <input id="setCr" placeholder="CR Number" class="border p-2 rounded" />
-          <select id="setPaperSize" class="border p-2 rounded font-semibold bg-slate-50">
-            <option value="80mm">Thermal Paper: 80mm</option>
-            <option value="58mm">Thermal Paper: 58mm</option>
-          </select>
-        </div>
-
-        <input id="setAddr" placeholder="Full Address Arabic Summary" class="w-full border p-2 rounded bg-emerald-50/30" />
-
-        <!-- ZATCA National Address Fields -->
-        <div class="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200 space-y-2">
-          <div class="font-bold text-xs text-emerald-900 uppercase">ZATCA Saudi National Address (Mandatory for Phase 2)</div>
-          <div class="grid grid-cols-3 gap-2">
-            <input id="setBuildingNo" placeholder="Building No (4 digits)" class="border p-2 rounded bg-white text-xs" />
-            <input id="setStreetName" placeholder="Street Name (Arabic)" class="border p-2 rounded bg-white text-xs col-span-2" />
-          </div>
-          <div class="grid grid-cols-3 gap-2">
-            <input id="setDistrict" placeholder="District / Area" class="border p-2 rounded bg-white text-xs" />
-            <input id="setCity" placeholder="City (e.g. Jeddah)" value="Jeddah" class="border p-2 rounded bg-white text-xs" />
-            <input id="setPostalCode" placeholder="Postal Code (5 digits)" class="border p-2 rounded bg-white text-xs" />
-          </div>
-          <input id="setAdditionalNo" placeholder="Additional No (4 digits)" class="w-full border p-2 rounded bg-white text-xs" />
-        </div>
-
-        <!-- Bank Details -->
-        <div class="p-3 bg-blue-50/60 rounded-lg border border-blue-200 space-y-2">
-          <div class="font-bold text-xs text-blue-900 uppercase">Shop Bank Details (Printed on Invoices)</div>
-          <input id="setBankName" placeholder="Bank Name (e.g., Al Rajhi Bank / مصرف الراجحي)" class="w-full border p-2 rounded bg-white" />
-          <div class="grid grid-cols-2 gap-2">
-            <input id="setBankAcc" placeholder="Account Number" class="border p-2 rounded bg-white font-mono text-xs" />
-            <input id="setBankIban" placeholder="IBAN (SA...)" class="border p-2 rounded bg-white font-mono text-xs" />
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between bg-slate-50 p-2 rounded border">
-          <label class="text-xs font-bold">Auto-Trigger Print Popup on Checkout:</label>
-          <input id="setAutoPrint" type="checkbox" checked class="w-4 h-4 accent-emerald-600" />
-        </div>
-
-        <div class="grid grid-cols-3 gap-2">
-          <input id="setAdminPin" maxlength="4" placeholder="Admin PIN (4)" class="border p-2 rounded" />
-          <input id="setCashierPin" maxlength="4" placeholder="Cashier PIN (4)" class="border p-2 rounded" />
-          <select id="setEnv" class="border p-2 rounded">
-            <option value="SANDBOX">SANDBOX</option>
-            <option value="SIMULATION">SIMULATION</option>
-            <option value="PRODUCTION">PRODUCTION</option>
-          </select>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2">
-          <input id="setMasterPass" placeholder="Master Reset Pass (admin123)" class="border p-2 rounded bg-amber-50 text-xs font-mono font-bold" />
-          <input id="setCutoffHour" type="number" min="0" max="23" value="6" placeholder="Cut-off Hour (e.g. 6 for 6AM)" class="border p-2 rounded bg-slate-50 text-xs font-bold" />
-        </div>
-
-        <textarea id="setCsid" rows="2" placeholder="ZATCA Compliance / Production CSID (Base64)" class="w-full border p-2 rounded font-mono text-xs"></textarea>
-        <textarea id="setSecret" rows="1" placeholder="ZATCA Secret Key" class="w-full border p-2 rounded font-mono text-xs"></textarea>
-        <textarea id="setPrivKey" rows="2" placeholder="ECDSA Private Key (PEM Format)" class="w-full border p-2 rounded font-mono text-xs"></textarea>
-        <button onclick="saveSettings()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-lg shadow" data-i18n="btn_save_settings">
-          Save All Settings
-        </button>
-      </div>
-
-      <div class="space-y-6">
-        <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
-          <h2 class="font-bold text-lg text-slate-800">Staff Users, Supervisor & 4-Digit PINs</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-5 gap-2">
-            <input id="newStaffName" placeholder="Name" class="border p-2 rounded uppercase" />
-            <select id="newStaffRole" class="border p-2 rounded">
-              <option value="CASHIER">CASHIER</option>
-              <option value="SUPERVISOR">SUPERVISOR</option>
-              <option value="ADMIN">ADMIN</option>
-            </select>
-            <select id="newStaffShop" class="border p-2 rounded font-semibold bg-emerald-50 text-emerald-900">
-              <option value="1">Shop 1 (S1)</option>
-              <option value="2">Shop 2 (S2)</option>
-            </select>
-            <input id="newStaffPin" maxlength="4" placeholder="PIN" class="border p-2 rounded" />
-            <input id="newStaffPhone" placeholder="Phone" class="border p-2 rounded" />
-          </div>
-          <button onclick="addStaffUser()" class="bg-slate-800 text-white font-bold px-4 py-2 rounded text-xs">Add Staff PIN</button>
-          <table class="w-full text-xs text-left border mt-2">
-            <thead class="bg-slate-100">
-              <tr><th class="p-2">Name</th><th class="p-2">Role</th><th class="p-2">Branch</th><th class="p-2">PIN</th><th class="p-2">Phone</th><th class="p-2">Action</th></tr>
-            </thead>
-            <tbody id="staffTable"></tbody>
-          </table>
-        </div>
-
-        <!-- BACKUP, RESTORE & MASTER PASSWORD PROTECTED RESET -->
-        <div class="bg-white p-4 rounded-xl shadow space-y-4 text-sm border-2 border-amber-200">
-          <h2 class="font-bold text-lg text-amber-900">💾 Full Backup, Restore & Master Protected Reset</h2>
-          <p class="text-xs text-slate-600">Download a complete JSON backup of all your products, customers, settings, and bills anytime.</p>
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="downloadFullBackup()" class="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs">
-              ⬇️ Download Full Backup
-            </button>
-            <label class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-lg text-xs text-center cursor-pointer">
-              ⬆️ Upload & Restore Backup
-              <input type="file" accept=".json" onchange="restoreFullBackup(event)" class="hidden" />
-            </label>
-          </div>
-
-          <div class="border-t pt-3 space-y-2">
-            <div class="font-bold text-xs text-red-700 uppercase">Protected Reset Actions (Requires admin123)</div>
-            <p class="text-xs text-slate-500">Clears test transactions and resets ZATCA ICV counter back to 0.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button onclick="resetTransactions(true)" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 rounded text-xs">
-                🧹 Reset Bills Only
-              </button>
-              <button onclick="resetTransactions(false)" class="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-3 rounded text-xs">
-                ⚠️ Full Factory Wipe
-              </button>
+      <div class="bg-white p-4 rounded-xl shadow flex flex-col justify-between">
+        <div>
+          <h3 class="font-bold text-lg border-b pb-2 mb-3">Bill Summary</h3>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span>Base:</span><span id="cartSub">0.00 SAR</span></div>
+            <div class="flex justify-between"><span>VAT (15%):</span><span id="cartVat">0.00 SAR</span></div>
+            <div class="flex justify-between text-xl font-extrabold text-emerald-700 border-t pt-2"><span>Total:</span><span id="cartTotal">0.00 SAR</span></div>
+            <div class="pt-3 border-t mt-3 space-y-2">
+              <div class="flex justify-between items-center">
+                <label class="text-xs font-semibold">Cash Received:</label>
+                <input id="cashTendered" type="number" placeholder="0.00" oninput="calcChange()" class="w-32 border p-1.5 rounded text-right font-bold text-sm" />
+              </div>
+              <div class="flex justify-between text-sm font-bold text-blue-700"><span>Change:</span><span id="cashChange">0.00 SAR</span></div>
             </div>
           </div>
         </div>
+        <button id="checkoutBtn" onclick="submitSale()" class="mt-6 w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-lg">⚡ Instant Bill & Print</button>
       </div>
     </section>
 
+    <!-- OTHER TABS PLACEHOLDER / SETTINGS WITH STAFF SHOP SELECTOR -->
+    <section id="tab-settings" class="tab-section hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
+        <h2 class="font-bold text-lg text-emerald-800">Shop Settings</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <input id="setCompEn" placeholder="Shop Name (EN)" class="border p-2 rounded" />
+          <input id="setCompAr" placeholder="Shop Name (AR)" class="border p-2 rounded" />
+          <input id="setShopPhone" placeholder="Phone" class="border p-2 rounded" />
+          <input id="setVat" placeholder="VAT Number" class="border p-2 rounded" />
+        </div>
+        <button onclick="saveSettings()" class="w-full bg-emerald-700 text-white font-bold py-2.5 rounded-lg">Save Settings</button>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
+        <h2 class="font-bold text-lg text-slate-800">Staff PINs & Shop Assignment</h2>
+        <div class="grid grid-cols-1 gap-2">
+          <input id="newStaffName" placeholder="Staff Name" class="border p-2 rounded" />
+          <select id="newStaffRole" class="border p-2 rounded">
+            <option value="CASHIER">CASHIER</option>
+            <option value="SUPERVISOR">SUPERVISOR</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+          <select id="newStaffShop" class="border p-2 rounded font-semibold bg-emerald-50 text-emerald-900">
+            <option value="1">Shop 1 (S1)</option>
+            <option value="2">Shop 2 (S2)</option>
+          </select>
+          <input id="newStaffPin" maxlength="4" placeholder="4-Digit PIN" class="border p-2 rounded" />
+          <input id="newStaffPhone" placeholder="Phone" class="border p-2 rounded" />
+        </div>
+        <button onclick="addStaffUser()" class="bg-slate-800 text-white font-bold px-4 py-2 rounded">Add Staff PIN</button>
+        <table class="w-full text-xs text-left border mt-2">
+          <thead class="bg-slate-100">
+            <tr><th class="p-2">Name</th><th class="p-2">Role</th><th class="p-2">Branch</th><th class="p-2">PIN</th><th class="p-2">Action</th></tr>
+          </thead>
+          <tbody id="staffTable"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
-  <!-- MODALS -->
-  <div id="scannerModal" class="hidden fixed inset-0 bg-black/85 z-50 flex flex-col items-center justify-center p-4">
-    <div class="bg-white rounded-2xl p-4 w-full max-w-md space-y-3">
-      <div class="flex justify-between items-center">
-        <h3 class="font-bold text-slate-800">📷 Scan Barcode</h3>
-        <button onclick="closeCameraScanner()" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold">Close</button>
-      </div>
-      <div class="relative rounded-xl overflow-hidden bg-black">
-        <div class="laser-line"></div>
-        <div id="qr-reader" class="w-full"></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="quickAddModal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl p-5 w-full max-w-md space-y-3 shadow-2xl">
-      <h3 class="font-bold text-lg text-emerald-800">➕ New Product Found! Quick Add</h3>
-      <input id="qaBarcode" readonly class="w-full border bg-slate-100 p-2 rounded font-mono text-sm font-bold" />
-      <input id="qaNameEn" placeholder="Product Name (AUTO ALL CAPS) *" oninput="this.value=this.value.toUpperCase()" onblur="autoTranslate(this.value, 'qaNameAr')" class="w-full border p-2 rounded text-sm uppercase font-bold" />
-      <input id="qaNameAr" placeholder="Product Name (Arabic - Auto) *" class="w-full border p-2 rounded text-sm bg-emerald-50/40" />
-      <div class="grid grid-cols-2 gap-2">
-        <input id="qaCost" type="number" step="any" placeholder="Cost (Incl. VAT)" class="border p-2 rounded text-sm" />
-        <input id="qaPrice" type="number" step="any" placeholder="Selling Price (Incl. 15% VAT) *" class="border-2 border-emerald-600 p-2 rounded text-sm font-bold" />
-      </div>
-      <div class="flex gap-2 pt-2">
-        <button onclick="saveQuickProduct()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm">Save & Add</button>
-        <button onclick="document.getElementById('quickAddModal').classList.add('hidden')" class="px-4 bg-slate-200 rounded-lg text-sm">Cancel</button>
-      </div>
-    </div>
-  </div>
-
+  <!-- RECEIPT MODAL -->
   <div id="receiptModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 overflow-y-auto">
     <div id="receiptBox" class="bg-white p-4 rounded-xl shadow-2xl w-80 text-xs font-mono">
       <div class="text-center border-b pb-2 mb-2">
         <div id="recCompAr" class="font-bold text-sm"></div>
         <div id="recCompEn" class="font-bold"></div>
-        <div id="recAddrAr" class="text-[11px]"></div>
-        <div id="recPhone" class="text-[11px]"></div>
         <div>VAT: <span id="recVat"></span></div>
         <div id="recDocType" class="font-bold mt-1"></div>
       </div>
       <div class="mb-2 space-y-0.5">
-        <div>Inv No: <span id="recInvNo"></span> | ICV: <span id="recIcv"></span></div>
+        <div>Inv No: <span id="recInvNo"></span></div>
         <div>Date: <span id="recDate"></span></div>
-        <div>Customer: <span id="recParty"></span></div>
-        <div>Mode: <span id="recPayMode"></span></div>
       </div>
       <table class="w-full border-t border-b my-2 text-left">
         <thead><tr><th>Item</th><th>Qty</th><th>Total</th></tr></thead>
         <tbody id="recItems"></tbody>
       </table>
-      <div class="text-right space-y-1">
-        <div>Taxable (Excl. VAT): <span id="recSub"></span> SAR</div>
-        <div>VAT (15%): <span id="recTax"></span> SAR</div>
-        <div class="font-bold text-sm border-t pt-1">TOTAL (Incl. VAT): <span id="recGrand"></span> SAR</div>
-      </div>
-      <div id="recBalanceSection" class="border-t border-dashed mt-2 pt-2 text-right space-y-0.5 text-[11px]">
-        <div>Previous Balance: <span id="recPrevBal">0.00</span> SAR</div>
-        <div class="font-bold">Net Balance Due: <span id="recNewBal">0.00</span> SAR</div>
-      </div>
-      <div id="recBankBox" class="hidden border-t border-dashed mt-2 pt-1.5 text-center text-[10px] space-y-0.5">
-        <div id="recBankName" class="font-bold"></div>
-        <div id="recBankAcc"></div>
-        <div id="recBankIban"></div>
-      </div>
+      <div class="text-right font-bold text-sm">TOTAL: <span id="recGrand"></span> SAR</div>
       <div id="qrcode" class="flex justify-center my-3"></div>
-      <div class="space-y-2 mt-3 no-print font-sans">
-        <div class="flex gap-2">
-          <button onclick="printThermalReceipt()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded font-bold">🖨️ Thermal</button>
-          <button onclick="printA4Invoice()" class="flex-1 bg-blue-700 hover:bg-blue-800 text-white py-2 rounded font-bold">📄 A4 PDF</button>
-        </div>
-        <button onclick="sharePdfOnWhatsApp()" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded font-bold flex items-center justify-center gap-1">📲 WhatsApp</button>
-        <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="w-full bg-slate-200 py-1.5 rounded font-semibold">Close</button>
-      </div>
+      <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="w-full bg-slate-200 py-1.5 rounded font-semibold mt-2">Close</button>
     </div>
   </div>
-
-  <!-- A4 TEMPLATE -->
-  <div id="a4Wrapper" class="hidden">
-    <div id="a4InvoiceContainer" class="p-8 bg-white text-slate-800 font-sans" style="width: 210mm; min-height: 290mm;">
-      <div class="flex justify-between items-start border-b-2 border-emerald-700 pb-4 mb-6">
-        <div>
-          <h1 id="a4CompEn" class="text-2xl font-bold text-emerald-900"></h1>
-          <h2 id="a4CompAr" class="text-xl font-bold text-emerald-700"></h2>
-          <p class="text-sm mt-1">VAT No / الرقم الضريبي: <strong id="a4Vat"></strong></p>
-          <p class="text-sm">CR No: <span id="a4Cr"></span> | Tel: <span id="a4Phone"></span></p>
-          <p class="text-sm font-semibold text-slate-700" id="a4Addr"></p>
-        </div>
-        <div class="text-right">
-          <div id="a4Title" class="text-xl font-extrabold text-slate-900 uppercase">TAX INVOICE / فاتورة ضريبية</div>
-          <p class="text-sm mt-1">Invoice No: <strong id="a4InvNo"></strong></p>
-          <p class="text-sm">Date: <span id="a4Date"></span></p>
-          <p class="text-sm">ZATCA Status: <strong id="a4Status"></strong></p>
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border mb-6 text-sm">
-        <div>
-          <div class="font-bold text-slate-500 uppercase text-xs">Customer / العميل</div>
-          <div id="a4CustName" class="font-bold text-base mt-1"></div>
-          <div>VAT No: <span id="a4CustVat">-</span></div>
-          <div>Phone: <span id="a4CustPhone">-</span></div>
-        </div>
-        <div class="text-right">
-          <div class="font-bold text-slate-500 uppercase text-xs">Payment Summary</div>
-          <div class="mt-1">Payment Mode: <strong id="a4PayMode"></strong></div>
-          <div>Previous Balance: <strong id="a4PrevBal">0.00 SAR</strong></div>
-          <div>Net Closing Balance: <strong id="a4NewBal" class="text-emerald-800">0.00 SAR</strong></div>
-        </div>
-      </div>
-      <table class="w-full text-sm border-collapse border border-slate-300 mb-6">
-        <thead class="bg-emerald-800 text-white">
-          <tr>
-            <th class="border border-slate-300 p-2 text-left">#</th>
-            <th class="border border-slate-300 p-2 text-left">Description / البيان</th>
-            <th class="border border-slate-300 p-2 text-right">Qty</th>
-            <th class="border border-slate-300 p-2 text-right">Unit (Excl.)</th>
-            <th class="border border-slate-300 p-2 text-right">VAT (15%)</th>
-            <th class="border border-slate-300 p-2 text-right">Total (Incl.)</th>
-          </tr>
-        </thead>
-        <tbody id="a4ItemsBody"></tbody>
-      </table>
-      <div class="flex justify-between items-start mt-6">
-        <div class="space-y-3">
-          <div id="a4QrCode" class="p-2 border rounded bg-white inline-block"></div>
-        </div>
-        <div class="w-72 space-y-2 text-sm">
-          <div class="flex justify-between border-b pb-1"><span>Total Taxable (Excl.):</span><strong id="a4Sub"></strong></div>
-          <div class="flex justify-between border-b pb-1"><span>Total VAT (15%):</span><strong id="a4Tax"></strong></div>
-          <div class="flex justify-between text-lg font-extrabold text-emerald-800 pt-1"><span>Grand Total:</span><span id="a4Grand"></span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script src="/app.js"></script>
 </body>
 </html>
