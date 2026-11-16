@@ -186,6 +186,24 @@ app.post('/api/settings', async (req, res) => {
   }
 });
 
+async function getPartyLiveBalance(clientOrPool, partyId) {
+  const { rows } = await clientOrPool.query(`
+    SELECT 
+      p.opening_balance
+      + COALESCE((SELECT SUM(CASE WHEN doc_type IN ('B2B_INVOICE','B2C_INVOICE') AND payment_mode='CREDIT' THEN grand_total
+                                  WHEN doc_type IN ('B2B_CREDIT_NOTE','B2C_CREDIT_NOTE') AND payment_mode='CREDIT' THEN -grand_total
+                                  ELSE 0 END) FROM sales_transactions WHERE party_id = p.party_id), 0)
+      - COALESCE((SELECT SUM(CASE WHEN doc_type = 'PURCHASE' AND payment_mode='CREDIT' THEN grand_total
+                                  WHEN doc_type = 'PURCHASE_RETURN' AND payment_mode='CREDIT' THEN -grand_total
+                                  ELSE 0 END) FROM purchase_transactions WHERE party_id = p.party_id), 0)
+      - COALESCE((SELECT SUM(CASE WHEN voucher_type = 'RECEIPT' THEN amount ELSE 0 END) FROM party_vouchers WHERE party_id = p.party_id), 0)
+      + COALESCE((SELECT SUM(CASE WHEN voucher_type = 'PAYMENT' THEN amount ELSE 0 END) FROM party_vouchers WHERE party_id = p.party_id), 0)
+      AS current_balance
+    FROM parties p WHERE p.party_id = $1
+  `, [partyId]);
+  return rows.length ? Number(rows[0].current_balance) : 0;
+}
+
 app.get('/api/parties', async (req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -722,4 +740,4 @@ app.get('/api/reports/vat-return', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Saudi ZATCA Phase 2 Multi-Shop POS running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Saudi ZATCA Phase 2 Multi-Shop PIN POS running on port ${PORT}`));
