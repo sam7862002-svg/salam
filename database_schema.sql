@@ -1,49 +1,58 @@
-CREATE TABLE IF NOT EXISTS company_settings (
-    id SERIAL PRIMARY KEY,
-    company_name_en VARCHAR(150) NOT NULL DEFAULT 'My Retail Store',
-    company_name_ar VARCHAR(150) NOT NULL DEFAULT 'متجر التجزئة',
-    shop_phone VARCHAR(30) DEFAULT '',
+CREATE TABLE IF NOT EXISTS shops (
+    shop_id SERIAL PRIMARY KEY,
+    shop_name_en VARCHAR(150) NOT NULL DEFAULT 'Main Branch (ZATCA)',
+    shop_name_ar VARCHAR(150) NOT NULL DEFAULT 'الفرع الرئيسي (فاتورة إلكترونية)',
     vat_number VARCHAR(15) NOT NULL DEFAULT '300000000000003',
     cr_number VARCHAR(20) DEFAULT '1010000000',
     address_ar TEXT DEFAULT 'جدة، المملكة العربية السعودية',
-    building_no VARCHAR(10) DEFAULT '',
-    street_name VARCHAR(100) DEFAULT '',
-    district VARCHAR(100) DEFAULT '',
+    building_no VARCHAR(10) DEFAULT '1234',
+    street_name VARCHAR(100) DEFAULT 'شارع الملك فهد',
+    district VARCHAR(100) DEFAULT 'العليا',
     city VARCHAR(100) DEFAULT 'Jeddah',
-    postal_code VARCHAR(10) DEFAULT '',
-    additional_no VARCHAR(10) DEFAULT '',
-    bank_name VARCHAR(100) DEFAULT '',
-    bank_account_no VARCHAR(60) DEFAULT '',
-    bank_iban VARCHAR(60) DEFAULT '',
-    paper_size VARCHAR(10) DEFAULT '80mm',
-    auto_print BOOLEAN DEFAULT TRUE,
+    postal_code VARCHAR(10) DEFAULT '12345',
+    additional_no VARCHAR(10) DEFAULT '1234',
+    bank_name VARCHAR(100) DEFAULT 'مصرف الراجحي',
+    bank_account_no VARCHAR(60) DEFAULT 'SA0380000000123456789012',
+    bank_iban VARCHAR(60) DEFAULT 'SA0380000000123456789012',
+    is_zatca_enabled BOOLEAN DEFAULT TRUE,
     zatca_env VARCHAR(20) DEFAULT 'SANDBOX',
     csid_certificate TEXT,
     private_key TEXT,
     secret_key TEXT,
-    admin_pin VARCHAR(20) DEFAULT '1234',
-    cashier_pin VARCHAR(20) DEFAULT '0000',
-    master_reset_pass VARCHAR(30) DEFAULT 'admin123',
-    cutoff_hour INTEGER DEFAULT 6,
     last_icv INTEGER DEFAULT 0,
     last_pih TEXT DEFAULT 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ=='
 );
 
-INSERT INTO company_settings (id, company_name_en, company_name_ar, vat_number, last_icv)
-VALUES (1, 'Saudi Retail Store', 'متجر التجزئة السعودي', '300000000000003', 0)
+INSERT INTO shops (shop_id, shop_name_en, shop_name_ar, vat_number)
+VALUES 
+  (1, 'Main Branch (ZATCA Phase 2)', 'الفرع الرئيسي (مفعل ضريبي)', '300000000000003'),
+  (2, 'Branch 2 (GRD / Standard)', 'الفرع الثاني (عادي / غير مدرج)', '300000000000003')
+ON CONFLICT (shop_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS company_settings (
+    id SERIAL PRIMARY KEY,
+    master_reset_pass VARCHAR(30) DEFAULT 'admin123',
+    cutoff_hour INTEGER DEFAULT 6,
+    paper_size VARCHAR(10) DEFAULT '80mm',
+    auto_print BOOLEAN DEFAULT TRUE
+);
+
+INSERT INTO company_settings (id, master_reset_pass, cutoff_hour)
+VALUES (1, 'admin123', 6)
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS staff_users (
     user_id SERIAL PRIMARY KEY,
     staff_name VARCHAR(100) NOT NULL,
-    role VARCHAR(15) CHECK (role IN ('ADMIN', 'SUPERVISOR', 'CASHIER')) NOT NULL,
+    role VARCHAR(15) CHECK (role IN ('ADMIN', 'CASHIER')) NOT NULL,
     pin VARCHAR(20) UNIQUE NOT NULL,
-    phone VARCHAR(20) DEFAULT '',
+    shop_id INTEGER REFERENCES shops(shop_id) DEFAULT 1,
     active BOOLEAN DEFAULT TRUE
 );
 
-INSERT INTO staff_users (staff_name, role, pin) VALUES ('Owner / Admin', 'ADMIN', '1234') ON CONFLICT (pin) DO NOTHING;
-INSERT INTO staff_users (staff_name, role, pin) VALUES ('Counter Cashier 1', 'CASHIER', '0000') ON CONFLICT (pin) DO NOTHING;
+INSERT INTO staff_users (staff_name, role, pin, shop_id) VALUES ('Owner / Admin', 'ADMIN', '1234', 1) ON CONFLICT (pin) DO NOTHING;
+INSERT INTO staff_users (staff_name, role, pin, shop_id) VALUES ('Counter Cashier Shop 1', 'CASHIER', '0000', 1) ON CONFLICT (pin) DO NOTHING;
+INSERT INTO staff_users (staff_name, role, pin, shop_id) VALUES ('Cashier Shop 2 (GRD)', 'CASHIER', '1111', 2) ON CONFLICT (pin) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS parties (
     party_id SERIAL PRIMARY KEY,
@@ -79,6 +88,7 @@ CREATE TABLE IF NOT EXISTS sales_transactions (
     invoice_number VARCHAR(50) UNIQUE NOT NULL,
     icv INTEGER UNIQUE NOT NULL,
     uuid UUID UNIQUE NOT NULL,
+    shop_id INTEGER REFERENCES shops(shop_id) DEFAULT 1,
     party_id INTEGER REFERENCES parties(party_id),
     doc_type VARCHAR(20) CHECK (doc_type IN ('B2B_INVOICE', 'B2C_INVOICE', 'B2B_CREDIT_NOTE', 'B2C_CREDIT_NOTE')) NOT NULL,
     original_invoice_ref VARCHAR(50),
@@ -103,6 +113,7 @@ CREATE TABLE IF NOT EXISTS purchase_transactions (
     purchase_id SERIAL PRIMARY KEY,
     voucher_number VARCHAR(50) UNIQUE NOT NULL,
     supplier_inv_no VARCHAR(50) NOT NULL,
+    shop_id INTEGER REFERENCES shops(shop_id) DEFAULT 1,
     party_id INTEGER REFERENCES parties(party_id) NOT NULL,
     doc_type VARCHAR(20) CHECK (doc_type IN ('PURCHASE', 'PURCHASE_RETURN')) NOT NULL,
     original_purchase_ref VARCHAR(50),
