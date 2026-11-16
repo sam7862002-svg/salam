@@ -52,6 +52,7 @@ async function initializeDatabase() {
         admin_pin VARCHAR(20) DEFAULT '1234',
         cashier_pin VARCHAR(20) DEFAULT '0000',
         master_reset_pass VARCHAR(30) DEFAULT 'admin123',
+        cutoff_hour INTEGER DEFAULT 6,
         last_icv INTEGER DEFAULT 0,
         last_pih TEXT DEFAULT '${INITIAL_PIH}'
       );
@@ -84,10 +85,12 @@ async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS staff_users (
         user_id SERIAL PRIMARY KEY,
         staff_name VARCHAR(100) NOT NULL,
-        role VARCHAR(15) CHECK (role IN ('ADMIN', 'CASHIER')) NOT NULL,
+        role VARCHAR(15) CHECK (role IN ('ADMIN', 'SUPERVISOR', 'CASHIER')) NOT NULL,
         pin VARCHAR(20) UNIQUE NOT NULL,
+        phone VARCHAR(20) DEFAULT '',
         active BOOLEAN DEFAULT TRUE
       );
+      ALTER TABLE staff_users ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT '';
 
       INSERT INTO company_settings (id, company_name_en, company_name_ar, vat_number, last_icv)
       VALUES (1, 'Saudi Retail Store', 'متجر التجزئة السعودي', '300000000000003', 0)
@@ -184,11 +187,11 @@ app.get('/api/staff', async (req, res) => {
 });
 
 app.post('/api/staff', async (req, res) => {
-  const { staff_name, role, pin } = req.body;
+  const { staff_name, role, pin, phone } = req.body;
   try {
     const { rows } = await pool.query(
-      'INSERT INTO staff_users (staff_name, role, pin) VALUES ($1, $2, $3) RETURNING *',
-      [staff_name.toUpperCase(), role, pin]
+      'INSERT INTO staff_users (staff_name, role, pin, phone) VALUES ($1, $2, $3, $4) RETURNING *',
+      [staff_name.toUpperCase(), role, pin, phone || '']
     );
     res.json(rows[0]);
   } catch (e) {
@@ -219,7 +222,7 @@ app.post('/api/settings', async (req, res) => {
     company_name_en, company_name_ar, shop_phone, vat_number, cr_number, address_ar,
     building_no, street_name, district, city, postal_code, additional_no,
     bank_name, bank_account_no, bank_iban, paper_size, auto_print,
-    zatca_env, csid_certificate, private_key, secret_key, admin_pin, cashier_pin, master_reset_pass
+    zatca_env, csid_certificate, private_key, secret_key, admin_pin, cashier_pin, master_reset_pass, cutoff_hour
   } = req.body;
   try {
     await pool.query(
@@ -228,7 +231,7 @@ app.post('/api/settings', async (req, res) => {
         address_ar=$6, building_no=$7, street_name=$8, district=$9, city=$10, postal_code=$11, additional_no=$12,
         bank_name=$13, bank_account_no=$14, bank_iban=$15, paper_size=$16, auto_print=$17,
         zatca_env=$18, csid_certificate=$19, private_key=$20, secret_key=$21,
-        admin_pin=$22, cashier_pin=$23, master_reset_pass=$24
+        admin_pin=$22, cashier_pin=$23, master_reset_pass=$24, cutoff_hour=$25
        WHERE id = 1`,
       [
         company_name_en, company_name_ar, shop_phone || '', vat_number, cr_number,
@@ -236,7 +239,8 @@ app.post('/api/settings', async (req, res) => {
         bank_name || '', bank_account_no || '', bank_iban || '',
         paper_size || '80mm', auto_print !== false,
         zatca_env, csid_certificate, private_key, secret_key,
-        admin_pin || '1234', cashier_pin || '0000', master_reset_pass || 'admin123'
+        admin_pin || '1234', cashier_pin || '0000', master_reset_pass || 'admin123',
+        Number(cutoff_hour ?? 6)
       ]
     );
     res.json({ success: true });
@@ -619,7 +623,7 @@ app.post('/api/purchases', async (req, res) => {
 
     const enrichedItems = items.map(it => {
       const qty = Number(it.qty);
-      const unitPriceExcl = Number(it.unit_price); // Tax-exclusive unit price entered for purchases
+      const unitPriceExcl = Number(it.unit_price);
       const vatRate = Number(it.vat_rate ?? 15);
       const lineSubExcl = qty * unitPriceExcl;
       const lineVat = lineSubExcl * (vatRate / 100);
@@ -705,8 +709,15 @@ app.get('/api/reports/party-register', async (req, res) => {
   const { from, to } = req.query;
   const compSettingRes = await pool.query('SELECT cutoff_hour FROM company_settings WHERE id = 1');
   const cutoffH = compSettingRes.rows[0]?.cutoff_hour ?? 6;
-  const startDate = from ? `${from} ${String(cutoffH).padStart(2, '0')}:00:00` : '2000-01-01 00:00:00';
-  const endDate = to ? `${to} 23:59:59` : '2099-12-31 23:59:59';
+  const pad = n => String(n).padStart(2, '0');
+  
+  let startDate = from ? `${from} ${pad(cutoffH)}:00:00` : '2000-01-01 06:00:00';
+  let endDate = '2099-12-31 05:59:59';
+  if (to) {
+    const d = new Date(to);
+    d.setDate(d.getDate() + 1);
+    endDate = `${d.toISOString().slice(0, 10)} ${pad(cutoffH)}:00:00`;
+  }
 
   try {
     const { rows } = await pool.query(`
@@ -767,8 +778,15 @@ app.get('/api/reports/vat-return', async (req, res) => {
   const { from, to } = req.query;
   const compSettingRes = await pool.query('SELECT cutoff_hour FROM company_settings WHERE id = 1');
   const cutoffH = compSettingRes.rows[0]?.cutoff_hour ?? 6;
-  const startDate = from ? `${from} ${String(cutoffH).padStart(2, '0')}:00:00` : '2000-01-01 00:00:00';
-  const endDate = to ? `${to} 23:59:59` : '2099-12-31 23:59:59';
+  const pad = n => String(n).padStart(2, '0');
+
+  let startDate = from ? `${from} ${pad(cutoffH)}:00:00` : '2000-01-01 06:00:00';
+  let endDate = '2099-12-31 05:59:59';
+  if (to) {
+    const d = new Date(to);
+    d.setDate(d.getDate() + 1);
+    endDate = `${d.toISOString().slice(0, 10)} ${pad(cutoffH)}:00:00`;
+  }
 
   try {
     const salesVat = await pool.query(`
@@ -829,7 +847,7 @@ app.get('/api/system/backup', async (req, res) => {
     const vouchers = await pool.query('SELECT * FROM party_vouchers');
 
     const backupObj = {
-      version: '6.0.0',
+      version: '12.0.0',
       exported_at: new Date().toISOString(),
       data: {
         company_settings: settings.rows,
@@ -867,8 +885,8 @@ app.post('/api/system/restore', async (req, res) => {
     await client.query('TRUNCATE TABLE transaction_items, party_vouchers, sales_transactions, purchase_transactions, products, parties, staff_users RESTART IDENTITY CASCADE');
 
     for (const s of (data.staff_users || [])) {
-      await client.query('INSERT INTO staff_users (staff_name, role, pin, active) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
-        [s.staff_name, s.role, s.pin, s.active !== false]);
+      await client.query('INSERT INTO staff_users (staff_name, role, pin, phone, active) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
+        [s.staff_name, s.role, s.pin, s.phone || '', s.active !== false]);
     }
     for (const p of (data.parties || [])) {
       await client.query(
@@ -926,10 +944,10 @@ app.post('/api/system/restore', async (req, res) => {
       await client.query(
         `UPDATE company_settings SET company_name_en=$1, company_name_ar=$2, shop_phone=$3, vat_number=$4, cr_number=$5, address_ar=$6,
           building_no=$7, street_name=$8, district=$9, city=$10, postal_code=$11, additional_no=$12,
-          bank_name=$13, bank_account_no=$14, bank_iban=$15, paper_size=$16, auto_print=$17, last_icv=$18, last_pih=$19 WHERE id = 1`,
+          bank_name=$13, bank_account_no=$14, bank_iban=$15, paper_size=$16, auto_print=$17, cutoff_hour=$18, last_icv=$19, last_pih=$20 WHERE id = 1`,
         [c.company_name_en, c.company_name_ar, c.shop_phone || '', c.vat_number, c.cr_number, c.address_ar,
          c.building_no || '', c.street_name || '', c.district || '', c.city || 'Jeddah', c.postal_code || '', c.additional_no || '',
-         c.bank_name || '', c.bank_account_no || '', c.bank_iban || '', c.paper_size || '80mm', c.auto_print !== false, c.last_icv || 0, c.last_pih || INITIAL_PIH]
+         c.bank_name || '', c.bank_account_no || '', c.bank_iban || '', c.paper_size || '80mm', c.auto_print !== false, c.cutoff_hour ?? 6, c.last_icv || 0, c.last_pih || INITIAL_PIH]
       );
     }
 
@@ -979,4 +997,4 @@ app.post('/api/system/reset-transactions', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Saudi ZATCA Phase 2 POS v6 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Saudi ZATCA Phase 2 POS v12 running on port ${PORT}`));
