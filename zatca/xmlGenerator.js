@@ -1,6 +1,6 @@
 const { create } = require('xmlbuilder2');
 
-function generateZatcaXML({ shop, invoice, party, items }) {
+function generateZatcaXML({ company, invoice, party, items }) {
   const isCreditNote = invoice.doc_type.includes('CREDIT_NOTE');
   const isB2B = invoice.doc_type.startsWith('B2B');
 
@@ -46,24 +46,24 @@ function generateZatcaXML({ shop, invoice, party, items }) {
 
   const supplier = doc.ele('cac:AccountingSupplierParty').ele('cac:Party');
   supplier.ele('cac:PartyIdentification')
-    .ele('cbc:ID', { schemeID: 'CRN' }).txt(shop.cr_number || '1010000000').up()
+    .ele('cbc:ID', { schemeID: 'CRN' }).txt(company.cr_number || '1010000000').up()
     .up();
   
   const supAddr = supplier.ele('cac:PostalAddress');
-  if (shop.building_no) supAddr.ele('cbc:BuildingNumber').txt(shop.building_no).up();
-  if (shop.street_name) supAddr.ele('cbc:StreetName').txt(shop.street_name).up();
-  if (shop.district) supAddr.ele('cbc:CitySubdivisionName').txt(shop.district).up();
-  supAddr.ele('cbc:CityName').txt(shop.city || 'Jeddah').up();
-  if (shop.postal_code) supAddr.ele('cbc:PostalZone').txt(shop.postal_code).up();
-  if (shop.additional_no) supAddr.ele('cbc:PlotIdentification').txt(shop.additional_no).up();
+  if (company.building_no) supAddr.ele('cbc:BuildingNumber').txt(company.building_no).up();
+  if (company.street_name) supAddr.ele('cbc:StreetName').txt(company.street_name).up();
+  if (company.district) supAddr.ele('cbc:CitySubdivisionName').txt(company.district).up();
+  supAddr.ele('cbc:CityName').txt(company.city || 'Jeddah').up();
+  if (company.postal_code) supAddr.ele('cbc:PostalZone').txt(company.postal_code).up();
+  if (company.additional_no) supAddr.ele('cbc:PlotIdentification').txt(company.additional_no).up();
   supAddr.ele('cac:Country').ele('cbc:IdentificationCode').txt('SA').up().up();
 
   supplier.ele('cac:PartyTaxScheme')
-    .ele('cbc:CompanyID').txt(shop.vat_number).up()
+    .ele('cbc:CompanyID').txt(company.vat_number).up()
     .ele('cac:TaxScheme').ele('cbc:ID').txt('VAT').up().up()
     .up();
   supplier.ele('cac:PartyLegalEntity')
-    .ele('cbc:RegistrationName').txt(shop.shop_name_ar).up()
+    .ele('cbc:RegistrationName').txt(company.company_name_ar).up()
     .up();
 
   const customer = doc.ele('cac:AccountingCustomerParty').ele('cac:Party');

@@ -1,1 +1,1 @@
-# Saudi ZATCA Phase 2 Multi-Shop POS v13.0
+# Saudi ZATCA Phase 2 POS v10.0

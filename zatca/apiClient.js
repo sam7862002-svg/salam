@@ -6,20 +6,12 @@ const ZATCA_ENDPOINTS = {
   PRODUCTION: 'https://gw-fatoora.zatca.gov.sa/e-invoicing/core'
 };
 
-async function submitToZatca({ shop, uuid, invoiceHash, xmlContent, docType }) {
-  if (!shop.is_zatca_enabled) {
-    return {
-      status: 'GRD_LOCAL_BRANCH',
-      mode: 'NON_ZATCA_BRANCH',
-      message: 'Branch configured as Standard/GRD mode (ZATCA reporting bypassed).'
-    };
-  }
-
-  const baseUrl = ZATCA_ENDPOINTS[shop.zatca_env] || ZATCA_ENDPOINTS.SANDBOX;
+async function submitToZatca({ company, uuid, invoiceHash, xmlContent, docType }) {
+  const baseUrl = ZATCA_ENDPOINTS[company.zatca_env] || ZATCA_ENDPOINTS.SANDBOX;
   const isB2B = docType.startsWith('B2B');
   const endpoint = isB2B ? `${baseUrl}/invoices/clearance/single` : `${baseUrl}/invoices/reporting/single`;
 
-  if (!shop.csid_certificate || !shop.secret_key) {
+  if (!company.csid_certificate || !company.secret_key) {
     return {
       status: isB2B ? 'CLEARED' : 'REPORTED',
       mode: 'SANDBOX_LOCAL_SIMULATION',
@@ -27,7 +19,7 @@ async function submitToZatca({ shop, uuid, invoiceHash, xmlContent, docType }) {
     };
   }
 
-  const authToken = Buffer.from(`${shop.csid_certificate}:${shop.secret_key}`).toString('base64');
+  const authToken = Buffer.from(`${company.csid_certificate}:${company.secret_key}`).toString('base64');
   const xmlBase64 = Buffer.from(xmlContent, 'utf8').toString('base64');
 
   try {
