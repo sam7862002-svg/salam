@@ -1,6 +1,6 @@
 {
   "name": "saudi-zatca-pos",
-  "version": "11.0.0",
+  "version": "12.0.0",
   "description": "Saudi Arabia ZATCA Phase 2 Ultimate Multi-Shop Enterprise POS with Full Arabic UI & Invoices",
   "main": "server.js",
   "scripts": {

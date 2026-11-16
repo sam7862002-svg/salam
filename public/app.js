@@ -1490,3 +1490,41 @@ function onPartyTypeChange(val) {
   if (val === 'VENDOR') balTypeSel.value = 'PAYABLE';
   else balTypeSel.value = 'RECEIVABLE';
 }
+
+async function exportCustomerLedger() {
+  const partyId = Number(document.getElementById('saleParty').value);
+  const from = document.getElementById('repFrom').value;
+  const to = document.getElementById('repTo').value;
+  const qs = `?party_id=${partyId}&from=${from}&to=${to}`;
+
+  const res = await fetch('/api/reports/ledger' + qs);
+  const data = await res.json();
+  if (data.error) return alert(data.error);
+
+  let runningBal = data.opening_balance;
+  const rows = [{
+    'Date': 'OPENING BALANCE',
+    'Particulars': 'Opening Due / Balance',
+    'Debit (SAR)': '',
+    'Credit (SAR)': '',
+    'Balance (SAR)': runningBal.toFixed(2)
+  }];
+
+  data.transactions.forEach(tx => {
+    const deb = Number(tx.debit || 0);
+    const cred = Number(tx.credit || 0);
+    runningBal = runningBal + deb - cred;
+    rows.push({
+      'Date': new Date(tx.created_at).toLocaleString(),
+      'Particulars': `${tx.particulars} (${tx.ref}) [${tx.payment_mode}]`,
+      'Debit (SAR)': deb ? deb.toFixed(2) : '',
+      'Credit (SAR)': cred ? cred.toFixed(2) : '',
+      'Balance (SAR)': runningBal.toFixed(2)
+    });
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ledger Statement');
+  XLSX.writeFile(wb, `${data.party.name_en}_Statement.xlsx`);
+}

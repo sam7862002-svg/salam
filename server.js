@@ -21,6 +21,25 @@ const pool = new Pool({
     : false
 });
 
+
+async function getPartyLiveBalance(clientOrPool, partyId) {
+  const { rows } = await clientOrPool.query(`
+    SELECT 
+      p.opening_balance
+      + COALESCE((SELECT SUM(CASE WHEN doc_type IN ('B2B_INVOICE','B2C_INVOICE') AND payment_mode='CREDIT' THEN grand_total
+                                  WHEN doc_type IN ('B2B_CREDIT_NOTE','B2C_CREDIT_NOTE') AND payment_mode='CREDIT' THEN -grand_total
+                                  ELSE 0 END) FROM sales_transactions WHERE party_id = p.party_id), 0)
+      - COALESCE((SELECT SUM(CASE WHEN doc_type = 'PURCHASE' AND payment_mode='CREDIT' THEN grand_total
+                                  WHEN doc_type = 'PURCHASE_RETURN' AND payment_mode='CREDIT' THEN -grand_total
+                                  ELSE 0 END) FROM purchase_transactions WHERE party_id = p.party_id), 0)
+      - COALESCE((SELECT SUM(CASE WHEN voucher_type = 'RECEIPT' THEN amount ELSE 0 END) FROM party_vouchers WHERE party_id = p.party_id), 0)
+      + COALESCE((SELECT SUM(CASE WHEN voucher_type = 'PAYMENT' THEN amount ELSE 0 END) FROM party_vouchers WHERE party_id = p.party_id), 0)
+      AS current_balance
+    FROM parties p WHERE p.party_id = $1
+  `, [partyId]);
+  return rows.length ? Number(rows[0].current_balance) : 0;
+}
+
 const INITIAL_PIH = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ==';
 
 async function initializeDatabase() {
@@ -817,6 +836,70 @@ app.get('/api/reports/vat-return', async (req, res) => {
       net_input_vat: netInputVat.toFixed(2),
       net_vat_payable: (netOutputVat - netInputVat).toFixed(2)
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+app.get('/api/reports/ledger', async (req, res) => {
+  const { party_id, from, to } = req.query;
+  if (!party_id) return res.status(400).json({ error: 'Party ID required' });
+  try {
+    const partyRes = await pool.query('SELECT * FROM parties WHERE party_id = $1', [party_id]);
+    if (!partyRes.rows.length) return res.status(404).json({ error: 'Party not found' });
+    const party = partyRes.rows[0];
+
+    const startDate = from ? `${from} 00:00:00` : '2000-01-01 00:00:00';
+    const endDate = to ? `${to} 23:59:59` : '2099-12-31 23:59:59';
+
+    // Transactions before 'from' to compute opening balance for the period
+    const priorSales = await pool.query(`
+      SELECT SUM(CASE WHEN doc_type IN ('B2B_INVOICE','B2C_INVOICE') AND payment_mode='CREDIT' THEN grand_total
+                      WHEN doc_type IN ('B2B_CREDIT_NOTE','B2C_CREDIT_NOTE') AND payment_mode='CREDIT' THEN -grand_total ELSE 0 END) AS val
+      FROM sales_transactions WHERE party_id = $1 AND created_at < $2
+    `, [party_id, startDate]);
+
+    const priorPurch = await pool.query(`
+      SELECT SUM(CASE WHEN doc_type = 'PURCHASE' AND payment_mode='CREDIT' THEN grand_total
+                      WHEN doc_type = 'PURCHASE_RETURN' AND payment_mode='CREDIT' THEN -grand_total ELSE 0 END) AS val
+      FROM purchase_transactions WHERE party_id = $1 AND created_at < $2
+    `, [party_id, startDate]);
+
+    const priorVouch = await pool.query(`
+      SELECT SUM(CASE WHEN voucher_type = 'RECEIPT' THEN amount ELSE 0 END) AS rec,
+             SUM(CASE WHEN voucher_type = 'PAYMENT' THEN amount ELSE 0 END) AS pay
+      FROM party_vouchers WHERE party_id = $1 AND created_at < $2
+    `, [party_id, startDate]);
+
+    const openingForPeriod = Number(party.opening_balance || 0)
+      + Number(priorSales.rows[0]?.val || 0)
+      - Number(priorPurch.rows[0]?.val || 0)
+      - Number(priorVouch.rows[0]?.rec || 0)
+      + Number(priorVouch.rows[0]?.pay || 0);
+
+    // Period transactions
+    const salesTx = await pool.query(`
+      SELECT created_at, invoice_number AS ref, doc_type AS particulars, grand_total AS debit, 0 AS credit, payment_mode
+      FROM sales_transactions WHERE party_id = $1 AND payment_mode='CREDIT' AND created_at BETWEEN $2 AND $3
+    `, [party_id, startDate, endDate]);
+
+    const purchTx = await pool.query(`
+      SELECT created_at, voucher_number AS ref, doc_type AS particulars, 0 AS debit, grand_total AS credit, payment_mode
+      FROM purchase_transactions WHERE party_id = $1 AND payment_mode='CREDIT' AND created_at BETWEEN $2 AND $3
+    `, [party_id, startDate, endDate]);
+
+    const vouchTx = await pool.query(`
+      SELECT created_at, voucher_no AS ref, voucher_type AS particulars,
+             CASE WHEN voucher_type='PAYMENT' THEN amount ELSE 0 END AS debit,
+             CASE WHEN voucher_type='RECEIPT' THEN amount ELSE 0 END AS credit,
+             payment_mode
+      FROM party_vouchers WHERE party_id = $1 AND created_at BETWEEN $2 AND $3
+    `, [party_id, startDate, endDate]);
+
+    const combined = [...salesTx.rows, ...purchTx.rows, ...vouchTx.rows].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+
+    res.json({ party, opening_balance: openingForPeriod, transactions: combined });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
