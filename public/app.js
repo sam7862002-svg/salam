@@ -6,13 +6,17 @@ let purCart = [];
 let currentRole = 'ADMIN';
 let currentStaffName = 'Admin';
 let currentShopId = 1;
-let currentShopName = 'Shop 1';
+let currentShopName = 'Shop 1 - Main Branch';
 let appSettings = {};
 let html5QrScanner = null;
 let scanTarget = 'SALE';
 let lastCompletedReceipt = null;
 let costPeekActive = false;
 let loginInProgress = false;
+
+// 4-Click Secret Badge Switcher Variables
+let badgeClickCount = 0;
+let badgeClickTimer = null;
 
 const TRANSLATIONS = {
   EN: {
@@ -204,9 +208,9 @@ window.addEventListener('DOMContentLoaded', () => {
     currentRole = savedRole;
     currentStaffName = savedName;
     currentShopId = Number(savedShopId || 1);
-    currentShopName = savedShopName || 'Shop 1';
+    currentShopName = savedShopName || 'Shop 1 - Main Branch';
 
-    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
+    updateBadgeDisplay();
     document.getElementById('loginScreen').classList.add('hidden');
     document.querySelectorAll('.admin-only').forEach(el => {
       if (currentRole === 'CASHIER') el.classList.add('hidden');
@@ -221,6 +225,46 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('offline', () => document.getElementById('offlineBadge').classList.remove('hidden'));
   if (!navigator.onLine) document.getElementById('offlineBadge').classList.remove('hidden');
 });
+
+// 4-Click Badge Switcher Logic
+function handleBadgeClick() {
+  badgeClickCount++;
+  if (badgeClickTimer) clearTimeout(badgeClickTimer);
+
+  if (badgeClickCount >= 4) {
+    badgeClickCount = 0;
+    openSecretShopSwitcher();
+    return;
+  }
+
+  badgeClickTimer = setTimeout(() => {
+    badgeClickCount = 0;
+  }, 1000);
+}
+
+function openSecretShopSwitcher() {
+  const nextShopId = currentShopId === 1 ? 2 : 1;
+  const nextShopName = nextShopId === 1 ? 'Shop 1 - Main Branch' : 'Shop 2 - Counter Branch';
+  
+  if (confirm(`🔄 Multi-Shop Switcher\nCurrent Active: ${currentShopName}\n\nSwitch to ${nextShopName}?`)) {
+    currentShopId = nextShopId;
+    currentShopName = nextShopName;
+    localStorage.setItem('zatca_pos_shop_id', currentShopId);
+    localStorage.setItem('zatca_pos_shop_name', currentShopName);
+    updateBadgeDisplay();
+    alert(`Successfully switched to ${currentShopName}!\nInvoices will now use the ${currentShopId === 1 ? 'S1' : 'S2'} prefix.`);
+  }
+}
+
+function updateBadgeDisplay() {
+  const badge = document.getElementById('roleBadge');
+  if (badge) {
+    badge.innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
+    badge.style.cursor = 'pointer';
+    badge.title = 'Click 4 times quickly to switch shop branch';
+    badge.onclick = handleBadgeClick;
+  }
+}
 
 async function doLogin() {
   if (loginInProgress) return;
@@ -247,14 +291,14 @@ async function doLogin() {
     currentRole = data.role;
     currentStaffName = data.staff_name || data.role;
     currentShopId = data.shop_id || 1;
-    currentShopName = data.shop_name || 'Shop 1';
+    currentShopName = data.shop_name || 'Shop 1 - Main Branch';
 
     localStorage.setItem('zatca_pos_role', currentRole);
     localStorage.setItem('zatca_pos_name', currentStaffName);
     localStorage.setItem('zatca_pos_shop_id', currentShopId);
     localStorage.setItem('zatca_pos_shop_name', currentShopName);
 
-    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
+    updateBadgeDisplay();
     document.getElementById('loginScreen').classList.add('hidden');
 
     document.querySelectorAll('.admin-only').forEach(el => {
@@ -651,7 +695,7 @@ function showReceipt(data, isNewSale = false) {
   document.getElementById('recAddrAr').innerText = company.address_ar || '';
   document.getElementById('recPhone').innerText = company.shop_phone ? `Tel: ${company.shop_phone}` : '';
   document.getElementById('recVat').innerText = company.vat_number;
-  document.getElementById('recDocType').innerText = `${sale.doc_type} [Shop ID: ${sale.shop_id}]`;
+  document.getElementById('recDocType').innerText = `${sale.doc_type} [Branch ID: ${sale.shop_id}]`;
   document.getElementById('recInvNo').innerText = sale.invoice_number;
   document.getElementById('recIcv').innerText = sale.icv;
   document.getElementById('recDate').innerText = new Date(sale.created_at).toLocaleString();
@@ -713,7 +757,7 @@ function populateA4Template({ sale, items, company, party }) {
   document.getElementById('a4Title').innerText = isCredit ? 'TAX CREDIT NOTE / إشعار دائن ضريبي' : 'TAX INVOICE / فاتورة ضريبية';
   document.getElementById('a4InvNo').innerText = sale.invoice_number;
   document.getElementById('a4Date').innerText = new Date(sale.created_at).toLocaleString();
-  document.getElementById('a4Status').innerText = `${sale.zatca_status} (Shop: ${sale.shop_id})`;
+  document.getElementById('a4Status').innerText = `${sale.zatca_status} (Branch: ${sale.shop_id})`;
 
   document.getElementById('a4CustName').innerText = party ? `${party.name_en} ${party.name_ar ? '/ ' + party.name_ar : ''}` : 'Walk-in Cash Customer';
   document.getElementById('a4CustVat').innerText = (party && party.vat_number) || '-';
@@ -1372,7 +1416,7 @@ async function addStaffUser() {
     staff_name: document.getElementById('newStaffName').value,
     role: document.getElementById('newStaffRole').value,
     pin: document.getElementById('newStaffPin').value,
-    shop_id: 1, // Default to Shop 1, can be expanded if needed
+    shop_id: 1,
     phone: document.getElementById('newStaffPhone').value
   };
   if (!payload.staff_name || payload.pin.length !== 4) return alert('Enter Staff Name & 4-Digit PIN');
