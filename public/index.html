@@ -118,7 +118,7 @@
       </div>
     </section>
 
-    <!-- OTHER TABS PLACEHOLDER / SETTINGS WITH STAFF SHOP SELECTOR -->
+    <!-- TAB SETTINGS WITH 5-GRID STAFF SHOP SELECTOR -->
     <section id="tab-settings" class="tab-section hidden grid grid-cols-1 md:grid-cols-2 gap-6">
       <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
         <h2 class="font-bold text-lg text-emerald-800">Shop Settings</h2>
@@ -132,21 +132,21 @@
       </div>
       <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
         <h2 class="font-bold text-lg text-slate-800">Staff PINs & Shop Assignment</h2>
-        <div class="grid grid-cols-1 gap-2">
-          <input id="newStaffName" placeholder="Staff Name" class="border p-2 rounded" />
-          <select id="newStaffRole" class="border p-2 rounded">
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-2">
+          <input id="newStaffName" placeholder="Name" class="border p-2 rounded text-xs" />
+          <select id="newStaffRole" class="border p-2 rounded text-xs">
             <option value="CASHIER">CASHIER</option>
             <option value="SUPERVISOR">SUPERVISOR</option>
             <option value="ADMIN">ADMIN</option>
           </select>
-          <select id="newStaffShop" class="border p-2 rounded font-semibold bg-emerald-50 text-emerald-900">
+          <select id="newStaffShop" class="border p-2 rounded text-xs font-semibold bg-emerald-50 text-emerald-900">
             <option value="1">Shop 1 (S1)</option>
             <option value="2">Shop 2 (S2)</option>
           </select>
-          <input id="newStaffPin" maxlength="4" placeholder="4-Digit PIN" class="border p-2 rounded" />
-          <input id="newStaffPhone" placeholder="Phone" class="border p-2 rounded" />
+          <input id="newStaffPin" maxlength="4" placeholder="PIN" class="border p-2 rounded text-xs" />
+          <input id="newStaffPhone" placeholder="Phone" class="border p-2 rounded text-xs" />
         </div>
-        <button onclick="addStaffUser()" class="bg-slate-800 text-white font-bold px-4 py-2 rounded">Add Staff PIN</button>
+        <button onclick="addStaffUser()" class="bg-slate-800 text-white font-bold px-4 py-2 rounded text-xs">Add Staff PIN</button>
         <table class="w-full text-xs text-left border mt-2">
           <thead class="bg-slate-100">
             <tr><th class="p-2">Name</th><th class="p-2">Role</th><th class="p-2">Branch</th><th class="p-2">PIN</th><th class="p-2">Action</th></tr>
