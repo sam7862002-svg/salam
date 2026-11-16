@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS company_settings (
     admin_pin VARCHAR(20) DEFAULT '1234',
     cashier_pin VARCHAR(20) DEFAULT '0000',
     master_reset_pass VARCHAR(30) DEFAULT 'admin123',
+    cutoff_hour INTEGER DEFAULT 6,
     last_icv INTEGER DEFAULT 0,
     last_pih TEXT DEFAULT 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ=='
 );
@@ -35,8 +36,9 @@ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS staff_users (
     user_id SERIAL PRIMARY KEY,
     staff_name VARCHAR(100) NOT NULL,
-    role VARCHAR(15) CHECK (role IN ('ADMIN', 'CASHIER')) NOT NULL,
+    role VARCHAR(15) CHECK (role IN ('ADMIN', 'SUPERVISOR', 'CASHIER')) NOT NULL,
     pin VARCHAR(20) UNIQUE NOT NULL,
+    phone VARCHAR(20) DEFAULT '',
     active BOOLEAN DEFAULT TRUE
 );
 

@@ -11,6 +11,153 @@ let lastCompletedReceipt = null;
 let costPeekActive = false;
 let loginInProgress = false;
 
+const TRANSLATIONS = {
+  EN: {
+    login_title: 'ZATCA Phase 2 POS',
+    login_sub: 'Enter 4-Digit PIN (Auto-Unlocks on 4th Digit)',
+    login_btn: 'Unlock POS',
+    tab_pos: 'POS / Credit Note',
+    tab_purchase: 'Purchase / Return',
+    tab_history: 'Bills History',
+    tab_parties: 'Customers & Vendors',
+    tab_products: 'Products',
+    tab_reports: 'VAT & Z-Close',
+    tab_settings: 'Settings & Backup',
+    btn_lock: 'Lock',
+    sales_heading: 'Sales / Credit Note',
+    b2c_inv: 'B2C Simplified Tax Invoice',
+    b2b_inv: 'B2B Standard Tax Invoice',
+    b2c_cn: 'B2C Sales Return (Credit Note)',
+    b2b_cn: 'B2B Sales Return (Credit Note)',
+    th_item: 'Item (EN / AR)',
+    th_qty: 'Qty',
+    th_price: 'Price (Incl.)',
+    th_total: 'Total',
+    bill_summary: 'Bill Summary',
+    base_amt: 'Base Amount (Excl. VAT):',
+    vat_incl: 'VAT (15% Included):',
+    grand_tot: 'Grand Total:',
+    cash_rec: 'Cash Received:',
+    change_due: 'Balance / Change:',
+    btn_checkout: '⚡ Instant Bill & Print',
+    purchase_heading: 'Purchase & Purchase Return (Enter Unit Cost Excl. VAT)',
+    pur_inv: 'Purchase Invoice',
+    pur_ret: 'Purchase Return (Debit Note)',
+    history_heading: 'Recent ZATCA Invoices & Credit Notes',
+    btn_sync_zatca: '🔄 Sync Pending to ZATCA',
+    btn_refresh: 'Refresh',
+    th_inv: 'Invoice No',
+    th_date: 'Date',
+    th_type: 'Type',
+    th_customer: 'Customer',
+    th_mode: 'Mode',
+    th_staff: 'Staff',
+    th_zatca: 'ZATCA Status',
+    th_actions: 'Actions',
+    parties_heading: 'Add Customer / Vendor',
+    btn_save_party: 'Save Party',
+    btn_cancel: 'Cancel',
+    voucher_heading: 'Record Receipt / Payment Voucher',
+    btn_save_voucher: 'Save & Print Voucher',
+    parties_list: 'Customers & Vendors List (Live Balance)',
+    th_name: 'Name (EN / AR)',
+    th_phone: 'Phone',
+    product_heading: 'Add / Update Product',
+    btn_save_prod: 'Save Product',
+    inventory_heading: 'Inventory & Price List (Prices Incl. 15% VAT)',
+    reports_heading: 'VAT Return & Sales Register Filters',
+    settings_heading: 'Shop Info, ZATCA National Address & Bank Details',
+    btn_save_settings: 'Save All Settings'
+  },
+  AR: {
+    login_title: 'نقطة البيع الفوترة الإلكترونية',
+    login_sub: 'أدخل رمز الـ PIN المكون من 4 أرقام',
+    login_btn: 'فتح نقطة البيع',
+    tab_pos: 'نقطة البيع / إشعار دائن',
+    tab_purchase: 'المشتريات / المرتجعات',
+    tab_history: 'سجل الفواتير',
+    tab_parties: 'العملاء والموردون',
+    tab_products: 'المنتجات',
+    tab_reports: 'تقرير الضريبة والإغلاق',
+    tab_settings: 'الإعدادات والنسخ الاحتياطي',
+    btn_lock: 'قفل',
+    sales_heading: 'المبيعات / إشعار دائن',
+    b2c_inv: 'فاتورة ضريبية مبسطة B2C',
+    b2b_inv: 'فاتورة ضريبية قياسية B2B',
+    b2c_cn: 'مرتجع مبيعات B2C (إشعار دائن)',
+    b2b_cn: 'مرتجع مبيعات B2B (إشعار دائن)',
+    th_item: 'الصنف (إنجليزي / عربي)',
+    th_qty: 'الكمية',
+    th_price: 'السعر (شامل)',
+    th_total: 'الإجمالي',
+    bill_summary: 'ملخص الفاتورة',
+    base_amt: 'المبلغ الأساسي (بدون ضريبة):',
+    vat_incl: 'الضريبة (15% مشمولة):',
+    grand_tot: 'الإجمالي الكلي:',
+    cash_rec: 'المبلغ المستلم:',
+    change_due: 'المتبقي / الباقي:',
+    btn_checkout: '⚡ إصدار الفاتورة والطباعة الفورية',
+    purchase_heading: 'المشتريات والمرتجعات (أدخل التكلفة بدون ضريبة)',
+    pur_inv: 'فاتورة شراء',
+    pur_ret: 'مرتجع شراء (إشعار مدين)',
+    history_heading: 'سجل الفواتير والإشعارات الضريبية',
+    btn_sync_zatca: '🔄 مزامنة الفواتير المعلقة مع هيئة الزكاة',
+    btn_refresh: 'تحديث',
+    th_inv: 'رقم الفاتورة',
+    th_date: 'التاريخ',
+    th_type: 'النوع',
+    th_customer: 'العميل',
+    th_mode: 'الطريقة',
+    th_staff: 'الموظف',
+    th_zatca: 'حالة هيئة الزكاة',
+    th_actions: 'الإجراءات',
+    parties_heading: 'إضافة عميل / مورد',
+    btn_save_party: 'حفظ الطرف',
+    btn_cancel: 'إلغاء',
+    voucher_heading: 'سند قبض / صرف',
+    btn_save_voucher: 'حفظ وطباعة السند',
+    parties_list: 'قائمة العملاء والموردين (الرصيد الحالي)',
+    th_name: 'الاسم (إنجليزي / عربي)',
+    th_phone: 'الجوال',
+    product_heading: 'إضافة / تعديل منتج',
+    btn_save_prod: 'حفظ المنتج',
+    inventory_heading: 'المخزون وقائمة الأسعار (الأسعار شاملة الضريبة)',
+    reports_heading: 'مرشحات إقرار الضريبة وسجل المبيعات',
+    settings_heading: 'بيانات المتجر، العنوان الوطني والبيانات البنكية',
+    btn_save_settings: 'حفظ جميع الإعدادات'
+  }
+};
+
+let currentLang = localStorage.getItem('zatca_pos_lang') || 'EN';
+
+function toggleLanguage() {
+  currentLang = currentLang === 'EN' ? 'AR' : 'EN';
+  localStorage.setItem('zatca_pos_lang', currentLang);
+  applyLanguage();
+}
+
+function applyLanguage() {
+  const btn = document.getElementById('langToggleBtn');
+  if (btn) btn.innerText = currentLang === 'EN' ? 'العربية 🇸🇦' : 'English 🌐';
+  
+  if (currentLang === 'AR') {
+    document.documentElement.setAttribute('dir', 'rtl');
+  } else {
+    document.documentElement.setAttribute('dir', 'ltr');
+  }
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (TRANSLATIONS[currentLang][key]) {
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        el.placeholder = TRANSLATIONS[currentLang][key];
+      } else {
+        el.innerText = TRANSLATIONS[currentLang][key];
+      }
+    }
+  });
+}
+
 const RETAIL_DICT = {
   milk: 'حليب', fresh: 'طازج', water: 'ماء', juice: 'عصير', bread: 'خبز',
   rice: 'أرز', sugar: 'سكر', tea: 'شاي', coffee: 'قهوة', oil: 'زيت',
@@ -43,8 +190,8 @@ async function autoTranslate(text, targetInputId) {
   }).join(' ');
 }
 
-// Check persisted login on load (Prevents pull-to-refresh logout)
 window.addEventListener('DOMContentLoaded', () => {
+  applyLanguage();
   const savedRole = localStorage.getItem('zatca_pos_role');
   const savedName = localStorage.getItem('zatca_pos_name');
   if (savedRole && savedName) {
@@ -61,7 +208,6 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginPin').focus();
   }
 
-  // Check online/offline status
   window.addEventListener('online', () => document.getElementById('offlineBadge').classList.add('hidden'));
   window.addEventListener('offline', () => document.getElementById('offlineBadge').classList.remove('hidden'));
   if (!navigator.onLine) document.getElementById('offlineBadge').classList.remove('hidden');
@@ -121,7 +267,7 @@ async function init() {
   await loadSettings();
   await loadParties();
   await loadProducts();
-  if (currentRole === 'ADMIN') {
+  if (currentRole === 'ADMIN' || currentRole === 'SUPERVISOR') {
     setVatFilter('CURRENT_MONTH');
     loadStaffUsers();
   }
@@ -148,7 +294,6 @@ function togglePurReturnFields() {
   else box.classList.add('hidden');
 }
 
-// Smart Party selection (Cash vs Credit account mode auto-switch payment mode)
 function onPartySelectionChange(mode) {
   const selId = mode === 'SALE' ? 'saleParty' : 'purParty';
   const payModeId = mode === 'SALE' ? 'salePaymentMode' : 'purPayMode';
@@ -166,7 +311,6 @@ function onPartySelectionChange(mode) {
   }
 }
 
-// --- LIVE SEARCH DROPDOWN ---
 function showLiveSearchDropdown(query, mode) {
   const dropdownId = mode === 'SALE' ? 'posSearchDropdown' : 'purSearchDropdown';
   const box = document.getElementById(dropdownId);
@@ -230,7 +374,6 @@ function selectFromDropdown(productId, mode) {
   }
 }
 
-// --- BARCODE SCANNER ---
 function playBeep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -340,7 +483,6 @@ async function saveQuickProduct() {
   else addProductObjectToPurCart(newProd);
 }
 
-// --- SMART PRODUCTS TAB BARCODE SCAN (EDIT OR STOCK ADD) ---
 function checkProductBarcode(barcode) {
   const code = (barcode || '').trim();
   if (!code) return;
@@ -356,7 +498,6 @@ function checkProductBarcode(barcode) {
   }
 }
 
-// --- SMART CART & EXPANDABLE DISCREET COST ---
 function addProductToSaleCart(prod) {
   const existing = cart.find(c => c.product_id === prod.product_id);
   if (existing) {
@@ -461,7 +602,7 @@ async function submitSale() {
     loadParties();
   } finally {
     btn.disabled = false;
-    btn.innerText = '⚡ Instant Bill & Print';
+    btn.innerText = TRANSLATIONS[currentLang].btn_checkout || '⚡ Instant Bill & Print';
   }
 }
 
@@ -483,7 +624,6 @@ function updatePartyLiveBalance(mode) {
   }
 }
 
-// --- RECEIPT & SMART AUTO-PRINT ROUTING ---
 function showReceipt(data, isNewSale = false) {
   lastCompletedReceipt = data;
   const { sale, items, company, party } = data;
@@ -563,23 +703,6 @@ function populateA4Template({ sale, items, company, party }) {
   document.getElementById('a4PayMode').innerText = sale.payment_mode;
   document.getElementById('a4PrevBal').innerText = `${Number(sale.prev_balance || 0).toFixed(2)} SAR`;
   document.getElementById('a4NewBal').innerText = `${Number(sale.new_balance || 0).toFixed(2)} SAR`;
-
-  if (sale.original_invoice_ref) {
-    document.getElementById('a4OrigRefRow').classList.remove('hidden');
-    document.getElementById('a4OrigRef').innerText = sale.original_invoice_ref;
-  } else {
-    document.getElementById('a4OrigRefRow').classList.add('hidden');
-  }
-
-  const a4BankBox = document.getElementById('a4BankBox');
-  if (company.bank_name || company.bank_account_no || company.bank_iban) {
-    a4BankBox.classList.remove('hidden');
-    document.getElementById('a4BankName').innerText = company.bank_name || '-';
-    document.getElementById('a4BankAcc').innerText = company.bank_account_no || '-';
-    document.getElementById('a4BankIban').innerText = company.bank_iban || '-';
-  } else {
-    a4BankBox.classList.add('hidden');
-  }
 
   const tbody = document.getElementById('a4ItemsBody');
   tbody.innerHTML = '';
@@ -661,7 +784,11 @@ async function sharePdfOnWhatsApp() {
       phone = prompt('Enter Customer WhatsApp Number (e.g. 9665XXXXXXXX):', '966') || '';
     }
     const msg = encodeURIComponent(
-      `*${company.company_name_en}*\nInvoice: *${sale.invoice_number}*\nTotal (Incl. 15% VAT): *${sale.grand_total} SAR*\nNet Balance Due: *${sale.new_balance} SAR*\n(Please find the downloaded A4 PDF attached)`
+      `*${company.company_name_en}*
+Invoice: *${sale.invoice_number}*
+Total (Incl. 15% VAT): *${sale.grand_total} SAR*
+Net Balance Due: *${sale.new_balance} SAR*
+(Please find the downloaded A4 PDF attached)`
     );
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
   } catch (err) {
@@ -670,7 +797,6 @@ async function sharePdfOnWhatsApp() {
   }
 }
 
-// --- PURCHASE (TAX-EXCLUSIVE UNIT COST) ---
 function addProductObjectToPurCart(prod) {
   const existing = purCart.find(c => c.product_id === prod.product_id);
   const defaultExcl = Number(prod.cost_price || prod.selling_price) / 1.15;
@@ -774,9 +900,10 @@ async function triggerZatcaBatchSync() {
   const res = await fetch('/api/zatca/sync-batch', { method: 'POST' });
   const data = await res.json();
   if (data.error) return alert('Sync Error: ' + data.error);
-  alert(`ZATCA Z-Close Batch Sync Complete!\nChecked: ${data.total_checked || 0} | Synced: ${data.synced || 0}`);
+  alert(`ZATCA Z-Close Batch Sync Complete!
+Checked: ${data.total_checked || 0} | Synced: ${data.synced || 0}`);
   loadSalesHistory();
-  if (currentRole === 'ADMIN') loadReports();
+  if (currentRole === 'ADMIN' || currentRole === 'SUPERVISOR') loadReports();
 }
 
 async function reprintInvoice(saleId) {
@@ -814,15 +941,12 @@ async function loadParties() {
     const balTag = bal !== 0 ? ` [Bal: ${bal.toFixed(2)}]` : '';
     const opt = `<option value="${p.party_id}">${p.name_en} (${p.party_type} - ${p.account_mode})${balTag}</option>`;
     
-    // POS / Credit Note ONLY shows Customers & Both (Strictly exclude pure VENDORS)
     if (p.party_type === 'CUSTOMER' || p.party_type === 'BOTH') {
       saleSel.innerHTML += opt;
     }
-    // Purchase / Return ONLY shows Vendors & Both (Strictly exclude pure CUSTOMERS)
     if (p.party_type === 'VENDOR' || p.party_type === 'BOTH') {
       purSel.innerHTML += opt;
     }
-    // Vouchers show all parties
     vSel.innerHTML += opt;
 
     tbody.innerHTML += `<tr class="border-t hover:bg-slate-50">
@@ -960,7 +1084,6 @@ async function saveVoucher() {
   alert('Voucher Recorded & Balance Updated!');
 }
 
-// --- PRODUCTS ---
 async function loadProducts() {
   const res = await fetch('/api/products');
   products = await res.json();
@@ -1092,7 +1215,6 @@ function uploadProductExcel(event) {
   reader.readAsBinaryString(file);
 }
 
-// --- SETTINGS, BACKUP, RESTORE & MASTER RESET PASSWORD ---
 async function loadSettings() {
   const res = await fetch('/api/settings');
   const data = await res.json();
@@ -1122,6 +1244,7 @@ async function loadSettings() {
     document.getElementById('setAdminPin').value = data.admin_pin || '1234';
     document.getElementById('setCashierPin').value = data.cashier_pin || '0000';
     document.getElementById('setMasterPass').value = data.master_reset_pass || 'admin123';
+    document.getElementById('setCutoffHour').value = data.cutoff_hour ?? 6;
     document.getElementById('envBadge').innerText = data.zatca_env || 'SANDBOX';
   }
 }
@@ -1151,7 +1274,8 @@ async function saveSettings() {
     private_key: document.getElementById('setPrivKey').value,
     admin_pin: document.getElementById('setAdminPin').value,
     cashier_pin: document.getElementById('setCashierPin').value,
-    master_reset_pass: document.getElementById('setMasterPass').value
+    master_reset_pass: document.getElementById('setMasterPass').value,
+    cutoff_hour: Number(document.getElementById('setCutoffHour').value || 6)
   };
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   alert('All Settings Saved!');
@@ -1216,6 +1340,7 @@ async function loadStaffUsers() {
       <td class="p-2 font-bold">${u.staff_name}</td>
       <td class="p-2">${u.role}</td>
       <td class="p-2 font-mono">${u.pin}</td>
+      <td class="p-2">${u.phone || '-'}</td>
       <td class="p-2"><button onclick="deleteStaffUser(${u.user_id})" class="text-red-600 font-bold">Del</button></td>
     </tr>`;
   });
@@ -1225,7 +1350,8 @@ async function addStaffUser() {
   const payload = {
     staff_name: document.getElementById('newStaffName').value,
     role: document.getElementById('newStaffRole').value,
-    pin: document.getElementById('newStaffPin').value
+    pin: document.getElementById('newStaffPin').value,
+    phone: document.getElementById('newStaffPhone').value
   };
   if (!payload.staff_name || payload.pin.length !== 4) return alert('Enter Staff Name & 4-Digit PIN');
   const res = await fetch('/api/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1233,6 +1359,7 @@ async function addStaffUser() {
   if (data.error) return alert(data.error);
   document.getElementById('newStaffName').value = '';
   document.getElementById('newStaffPin').value = '';
+  document.getElementById('newStaffPhone').value = '';
   loadStaffUsers();
 }
 
@@ -1241,7 +1368,6 @@ async function deleteStaffUser(id) {
   loadStaffUsers();
 }
 
-// --- VAT REPORT FILTERING (QUARTERS, MONTHS, CUSTOM DATES) ---
 function setVatFilter(type) {
   const now = new Date();
   const year = now.getFullYear();
@@ -1268,6 +1394,17 @@ function setVatFilter(type) {
 
   document.getElementById('repFrom').value = startStr;
   document.getElementById('repTo').value = endStr;
+  loadReports();
+}
+
+function setMonthFilter(month) {
+  if (!month) return;
+  const now = new Date();
+  const year = now.getFullYear();
+  const firstDay = new Date(year, Number(month) - 1, 1);
+  const lastDay = new Date(year, Number(month), 0);
+  document.getElementById('repFrom').value = firstDay.toISOString().slice(0, 10);
+  document.getElementById('repTo').value = lastDay.toISOString().slice(0, 10);
   loadReports();
 }
 
