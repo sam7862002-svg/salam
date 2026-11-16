@@ -14,10 +14,6 @@ let lastCompletedReceipt = null;
 let costPeekActive = false;
 let loginInProgress = false;
 
-// 4-Click Secret Badge Switcher Variables
-let badgeClickCount = 0;
-let badgeClickTimer = null;
-
 const TRANSLATIONS = {
   EN: {
     login_title: 'ZATCA Phase 2 POS',
@@ -210,7 +206,7 @@ window.addEventListener('DOMContentLoaded', () => {
     currentShopId = Number(savedShopId || 1);
     currentShopName = savedShopName || 'Shop 1 - Main Branch';
 
-    updateBadgeDisplay();
+    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
     document.getElementById('loginScreen').classList.add('hidden');
     document.querySelectorAll('.admin-only').forEach(el => {
       if (currentRole === 'CASHIER') el.classList.add('hidden');
@@ -225,46 +221,6 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('offline', () => document.getElementById('offlineBadge').classList.remove('hidden'));
   if (!navigator.onLine) document.getElementById('offlineBadge').classList.remove('hidden');
 });
-
-// 4-Click Badge Switcher Logic
-function handleBadgeClick() {
-  badgeClickCount++;
-  if (badgeClickTimer) clearTimeout(badgeClickTimer);
-
-  if (badgeClickCount >= 4) {
-    badgeClickCount = 0;
-    openSecretShopSwitcher();
-    return;
-  }
-
-  badgeClickTimer = setTimeout(() => {
-    badgeClickCount = 0;
-  }, 1000);
-}
-
-function openSecretShopSwitcher() {
-  const nextShopId = currentShopId === 1 ? 2 : 1;
-  const nextShopName = nextShopId === 1 ? 'Shop 1 - Main Branch' : 'Shop 2 - Counter Branch';
-  
-  if (confirm(`🔄 Multi-Shop Switcher\nCurrent Active: ${currentShopName}\n\nSwitch to ${nextShopName}?`)) {
-    currentShopId = nextShopId;
-    currentShopName = nextShopName;
-    localStorage.setItem('zatca_pos_shop_id', currentShopId);
-    localStorage.setItem('zatca_pos_shop_name', currentShopName);
-    updateBadgeDisplay();
-    alert(`Successfully switched to ${currentShopName}!\nInvoices will now use the ${currentShopId === 1 ? 'S1' : 'S2'} prefix.`);
-  }
-}
-
-function updateBadgeDisplay() {
-  const badge = document.getElementById('roleBadge');
-  if (badge) {
-    badge.innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
-    badge.style.cursor = 'pointer';
-    badge.title = 'Click 4 times quickly to switch shop branch';
-    badge.onclick = handleBadgeClick;
-  }
-}
 
 async function doLogin() {
   if (loginInProgress) return;
@@ -298,7 +254,7 @@ async function doLogin() {
     localStorage.setItem('zatca_pos_shop_id', currentShopId);
     localStorage.setItem('zatca_pos_shop_name', currentShopName);
 
-    updateBadgeDisplay();
+    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
     document.getElementById('loginScreen').classList.add('hidden');
 
     document.querySelectorAll('.admin-only').forEach(el => {
@@ -1403,8 +1359,8 @@ async function loadStaffUsers() {
     tbody.innerHTML += `<tr class="border-t">
       <td class="p-2 font-bold">${u.staff_name}</td>
       <td class="p-2">${u.role}</td>
+      <td class="p-2 font-semibold text-emerald-800">${u.shop_name_en || 'Shop 1 - Main Branch'}</td>
       <td class="p-2 font-mono">${u.pin}</td>
-      <td class="p-2">${u.shop_name_en || 'Shop 1'}</td>
       <td class="p-2">${u.phone || '-'}</td>
       <td class="p-2"><button onclick="deleteStaffUser(${u.user_id})" class="text-red-600 font-bold">Del</button></td>
     </tr>`;
@@ -1415,18 +1371,21 @@ async function addStaffUser() {
   const payload = {
     staff_name: document.getElementById('newStaffName').value,
     role: document.getElementById('newStaffRole').value,
+    shop_id: Number(document.getElementById('newStaffShop').value || 1),
     pin: document.getElementById('newStaffPin').value,
-    shop_id: 1,
     phone: document.getElementById('newStaffPhone').value
   };
   if (!payload.staff_name || payload.pin.length !== 4) return alert('Enter Staff Name & 4-Digit PIN');
+  
   const res = await fetch('/api/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await res.json();
   if (data.error) return alert(data.error);
+
   document.getElementById('newStaffName').value = '';
   document.getElementById('newStaffPin').value = '';
   document.getElementById('newStaffPhone').value = '';
   loadStaffUsers();
+  alert('Staff PIN assigned successfully to the selected shop!');
 }
 
 async function deleteStaffUser(id) {
