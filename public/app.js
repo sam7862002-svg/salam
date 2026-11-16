@@ -98,7 +98,18 @@ async function loadShops() {
   try {
     const res = await fetch('/api/shops');
     shops = await res.json();
-  } catch (e) {}
+    
+    // സെറ്റിംഗ്സ് പേജിലെ Staff Shop Dropdown-ലേക്ക് ഷോപ്പുകൾ ഓട്ടോമാറ്റിക്കായി ലോഡ് ചെയ്യാൻ
+    const shopSelect = document.getElementById('newStaffShop');
+    if (shopSelect) {
+      shopSelect.innerHTML = '';
+      shops.forEach(sh => {
+        shopSelect.innerHTML += `<option value="${sh.shop_id}">${sh.shop_name_en} (${sh.prefix})</option>`;
+      });
+    }
+  } catch (e) {
+    console.error('Error loading shops:', e);
+  }
 }
 
 async function loadSettings() {
@@ -237,7 +248,7 @@ async function submitSale() {
     return_reason: document.getElementById('returnReason')?.value || '',
     payment_mode: document.getElementById('salePaymentMode').value,
     created_by: currentStaffName,
-    shop_id: currentShopId, // ഓട്ടോമാറ്റിക്കായി ലോഗിൻ ചെയ്ത സ്റ്റാഫിന്റെ ഷോപ്പ് ഐഡി പോകും!
+    shop_id: currentShopId,
     items: cart
   };
 
