@@ -1,1 +1,1 @@
-# Saudi ZATCA Phase 2 POS v15.0
+# Saudi ZATCA Phase 2 POS v6.0 (Ultimate Enterprise Edition)

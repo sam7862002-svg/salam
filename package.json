@@ -1,6 +1,6 @@
 {
   "name": "saudi-zatca-pos",
-  "version": "15.0.0",
+  "version": "9.0.0",
   "description": "Saudi Arabia ZATCA Phase 2 Ultimate Enterprise POS: Offline PWA, Smart Print Routing, Quarters/Months VAT, Bank Details, Backup/Restore & Factory Reset",
   "main": "server.js",
   "scripts": {
