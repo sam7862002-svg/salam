@@ -99,7 +99,6 @@ async function loadShops() {
     const res = await fetch('/api/shops');
     shops = await res.json();
     
-    // സെറ്റിംഗ്സ് പേജിലെ Staff Shop Dropdown-ലേക്ക് ഷോപ്പുകൾ ഓട്ടോമാറ്റിക്കായി ലോഡ് ചെയ്യാൻ
     const shopSelect = document.getElementById('newStaffShop');
     if (shopSelect) {
       shopSelect.innerHTML = '';
