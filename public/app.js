@@ -45,6 +45,7 @@ async function autoTranslate(text, targetInputId) {
 
 // Check persisted login on load (Prevents pull-to-refresh logout)
 window.addEventListener('DOMContentLoaded', () => {
+  applyLanguage();
   const savedRole = localStorage.getItem('zatca_pos_role');
   const savedName = localStorage.getItem('zatca_pos_name');
   if (savedRole && savedName) {
@@ -1122,6 +1123,7 @@ async function loadSettings() {
     document.getElementById('setAdminPin').value = data.admin_pin || '1234';
     document.getElementById('setCashierPin').value = data.cashier_pin || '0000';
     document.getElementById('setMasterPass').value = data.master_reset_pass || 'admin123';
+    document.getElementById('setCutoffHour').value = data.cutoff_hour ?? 6;
     document.getElementById('envBadge').innerText = data.zatca_env || 'SANDBOX';
   }
 }
@@ -1151,7 +1153,8 @@ async function saveSettings() {
     private_key: document.getElementById('setPrivKey').value,
     admin_pin: document.getElementById('setAdminPin').value,
     cashier_pin: document.getElementById('setCashierPin').value,
-    master_reset_pass: document.getElementById('setMasterPass').value
+    master_reset_pass: document.getElementById('setMasterPass').value,
+    cutoff_hour: Number(document.getElementById('setCutoffHour').value || 6)
   };
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   alert('All Settings Saved!');
@@ -1395,4 +1398,55 @@ function onPartyTypeChange(val) {
   } else {
     balTypeSel.value = 'RECEIVABLE';
   }
+}
+
+let currentLang = localStorage.getItem('zatca_pos_lang') || 'EN';
+
+const TRANSLATIONS = {
+  EN: {
+    pos: 'POS / Credit Note',
+    purchase: 'Purchase / Return',
+    history: 'Bills History',
+    parties: 'Customers & Vendors',
+    products: 'Products',
+    reports: 'VAT & Z-Close',
+    settings: 'Settings & Backup'
+  },
+  AR: {
+    pos: 'نقطة البيع / إشعار دائن',
+    purchase: 'المشتريات / المرتجعات',
+    history: 'سجل الفواتير',
+    parties: 'العملاء والموردون',
+    products: 'المنتجات',
+    reports: 'تقرير الضريبة والإغلاق',
+    settings: 'الإعدادات والنسخ الاحتياطي'
+  }
+};
+
+function toggleLanguage() {
+  currentLang = currentLang === 'EN' ? 'AR' : 'EN';
+  localStorage.setItem('zatca_pos_lang', currentLang);
+  applyLanguage();
+}
+
+function applyLanguage() {
+  const btn = document.getElementById('langToggleBtn');
+  if (btn) btn.innerText = currentLang === 'EN' ? 'العربية 🇸🇦' : 'English 🌐';
+  
+  if (currentLang === 'AR') {
+    document.documentElement.setAttribute('dir', 'rtl');
+  } else {
+    document.documentElement.setAttribute('dir', 'ltr');
+  }
+}
+
+function setMonthFilter(month) {
+  if (!month) return;
+  const now = new Date();
+  const year = now.getFullYear();
+  const firstDay = new Date(year, Number(month) - 1, 1);
+  const lastDay = new Date(year, Number(month), 0);
+  document.getElementById('repFrom').value = firstDay.toISOString().slice(0, 10);
+  document.getElementById('repTo').value = lastDay.toISOString().slice(0, 10);
+  loadReports();
 }

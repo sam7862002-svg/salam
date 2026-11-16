@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS company_settings (
     admin_pin VARCHAR(20) DEFAULT '1234',
     cashier_pin VARCHAR(20) DEFAULT '0000',
     master_reset_pass VARCHAR(30) DEFAULT 'admin123',
+    cutoff_hour INTEGER DEFAULT 6,
     last_icv INTEGER DEFAULT 0,
     last_pih TEXT DEFAULT 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ=='
 );

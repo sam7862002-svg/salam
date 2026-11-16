@@ -71,6 +71,7 @@ async function initializeDatabase() {
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS admin_pin VARCHAR(20) DEFAULT '1234';
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS cashier_pin VARCHAR(20) DEFAULT '0000';
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS master_reset_pass VARCHAR(30) DEFAULT 'admin123';
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS cutoff_hour INTEGER DEFAULT 6;
 
       ALTER TABLE parties ADD COLUMN IF NOT EXISTS account_mode VARCHAR(15) CHECK (account_mode IN ('CASH', 'CREDIT')) DEFAULT 'CREDIT';
 
@@ -702,7 +703,9 @@ app.post('/api/vouchers', async (req, res) => {
 
 app.get('/api/reports/party-register', async (req, res) => {
   const { from, to } = req.query;
-  const startDate = from ? `${from} 00:00:00` : '2000-01-01 00:00:00';
+  const compSettingRes = await pool.query('SELECT cutoff_hour FROM company_settings WHERE id = 1');
+  const cutoffH = compSettingRes.rows[0]?.cutoff_hour ?? 6;
+  const startDate = from ? `${from} ${String(cutoffH).padStart(2, '0')}:00:00` : '2000-01-01 00:00:00';
   const endDate = to ? `${to} 23:59:59` : '2099-12-31 23:59:59';
 
   try {
@@ -762,7 +765,9 @@ app.get('/api/reports/party-register', async (req, res) => {
 
 app.get('/api/reports/vat-return', async (req, res) => {
   const { from, to } = req.query;
-  const startDate = from ? `${from} 00:00:00` : '2000-01-01 00:00:00';
+  const compSettingRes = await pool.query('SELECT cutoff_hour FROM company_settings WHERE id = 1');
+  const cutoffH = compSettingRes.rows[0]?.cutoff_hour ?? 6;
+  const startDate = from ? `${from} ${String(cutoffH).padStart(2, '0')}:00:00` : '2000-01-01 00:00:00';
   const endDate = to ? `${to} 23:59:59` : '2099-12-31 23:59:59';
 
   try {

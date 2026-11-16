@@ -77,8 +77,9 @@
       <span id="roleBadge" class="text-xs bg-emerald-950 text-emerald-200 px-2 py-0.5 rounded">ADMIN</span>
       <span id="offlineBadge" class="hidden text-xs bg-red-600 text-white px-2 py-0.5 rounded font-bold">OFFLINE MODE</span>
     </div>
-    <div class="flex flex-wrap gap-1 text-sm">
-      <button onclick="showTab('pos')" class="tab-btn bg-emerald-950 px-3 py-1.5 rounded hover:bg-emerald-700">POS / Credit Note</button>
+    <div class="flex flex-wrap items-center gap-1 text-sm">
+      <button onclick="toggleLanguage()" class="bg-amber-400 hover:bg-amber-500 text-black font-bold px-2.5 py-1.5 rounded text-xs" id="langToggleBtn">العربية / EN</button>
+      <button onclick="showTab('pos')" data-i18n="tab_pos" class="tab-btn bg-emerald-950 px-3 py-1.5 rounded hover:bg-emerald-700">POS / Credit Note</button>
       <button onclick="showTab('purchase')" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Purchase / Return</button>
       <button onclick="showTab('history')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Bills History</button>
       <button onclick="showTab('parties')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Customers & Vendors</button>
@@ -443,12 +444,27 @@
       <div class="bg-white p-4 rounded-xl shadow space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h3 class="font-bold text-base text-emerald-900">VAT Return & Sales Register Filters</h3>
-          <div class="flex flex-wrap gap-1 text-xs">
-            <button onclick="setVatFilter('CURRENT_MONTH')" class="bg-slate-200 hover:bg-slate-300 px-2.5 py-1 rounded font-semibold">Current Month</button>
-            <button onclick="setVatFilter('Q1')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q1 (Jan-Mar)</button>
-            <button onclick="setVatFilter('Q2')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q2 (Apr-Jun)</button>
-            <button onclick="setVatFilter('Q3')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q3 (Jul-Sep)</button>
-            <button onclick="setVatFilter('Q4')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q4 (Oct-Dec)</button>
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
+            <select id="monthSelector" onchange="setMonthFilter(this.value)" class="border p-1 rounded font-semibold bg-emerald-50 text-emerald-900">
+              <option value="">📅 Select Month...</option>
+              <option value="01">January (01)</option>
+              <option value="02">February (02)</option>
+              <option value="03">March (03)</option>
+              <option value="04">April (04)</option>
+              <option value="05">May (05)</option>
+              <option value="06">June (06)</option>
+              <option value="07">July (07)</option>
+              <option value="08">August (08)</option>
+              <option value="09">September (09)</option>
+              <option value="10">October (10)</option>
+              <option value="11">November (11)</option>
+              <option value="12">December (12)</option>
+            </select>
+            <button onclick="setVatFilter('CURRENT_MONTH')" class="bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded font-semibold">Current Month</button>
+            <button onclick="setVatFilter('Q1')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2 py-1 rounded font-bold">Q1</button>
+            <button onclick="setVatFilter('Q2')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q2</button>
+            <button onclick="setVatFilter('Q3')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q3</button>
+            <button onclick="setVatFilter('Q4')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q4</button>
           </div>
         </div>
 
@@ -465,9 +481,10 @@
             <button onclick="triggerZatcaBatchSync()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold">
               🔒 Daily Z-Close & Sync ZATCA (<span id="pendingSyncCount">0</span>)
             </button>
-            <button onclick="exportSeparateExcel('SALES')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-bold">📥 Sales Excel</button>
-            <button onclick="exportSeparateExcel('SALES_RETURN')" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold">📥 Return Excel</button>
-            <button onclick="exportSeparateExcel('PURCHASE')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold">📥 Purchase Excel</button>
+            <button onclick="exportSeparateExcel('SALES')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Sales Excel</button>
+            <button onclick="exportSeparateExcel('SALES_RETURN')" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Return Excel</button>
+            <button onclick="exportSeparateExcel('PURCHASE')" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Purchase Excel</button>
+            <button onclick="exportSeparateExcel('PURCHASE_RETURN')" class="bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1.5 rounded font-bold">📥 Pur. Return Excel</button>
           </div>
         </div>
       </div>
@@ -560,7 +577,10 @@
           </select>
         </div>
 
-        <input id="setMasterPass" placeholder="Master Reset Password (default: admin123)" class="w-full border p-2 rounded bg-amber-50 text-xs font-mono font-bold" />
+        <div class="grid grid-cols-2 gap-2">
+          <input id="setMasterPass" placeholder="Master Reset Pass (admin123)" class="border p-2 rounded bg-amber-50 text-xs font-mono font-bold" />
+          <input id="setCutoffHour" type="number" min="0" max="23" value="6" placeholder="Cut-off Hour (e.g. 6 for 6AM)" class="border p-2 rounded bg-slate-50 text-xs font-bold" />
+        </div>
 
         <textarea id="setCsid" rows="2" placeholder="ZATCA Compliance / Production CSID (Base64)" class="w-full border p-2 rounded font-mono text-xs"></textarea>
         <textarea id="setSecret" rows="1" placeholder="ZATCA Secret Key" class="w-full border p-2 rounded font-mono text-xs"></textarea>
