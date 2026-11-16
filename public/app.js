@@ -1,9 +1,12 @@
 let parties = [];
 let products = [];
+let shops = [];
 let cart = [];
 let purCart = [];
 let currentRole = 'ADMIN';
 let currentStaffName = 'Admin';
+let currentShopId = 1;
+let currentShopName = 'Shop 1';
 let appSettings = {};
 let html5QrScanner = null;
 let scanTarget = 'SALE';
@@ -194,10 +197,16 @@ window.addEventListener('DOMContentLoaded', () => {
   applyLanguage();
   const savedRole = localStorage.getItem('zatca_pos_role');
   const savedName = localStorage.getItem('zatca_pos_name');
+  const savedShopId = localStorage.getItem('zatca_pos_shop_id');
+  const savedShopName = localStorage.getItem('zatca_pos_shop_name');
+
   if (savedRole && savedName) {
     currentRole = savedRole;
     currentStaffName = savedName;
-    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole})`;
+    currentShopId = Number(savedShopId || 1);
+    currentShopName = savedShopName || 'Shop 1';
+
+    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
     document.getElementById('loginScreen').classList.add('hidden');
     document.querySelectorAll('.admin-only').forEach(el => {
       if (currentRole === 'CASHIER') el.classList.add('hidden');
@@ -237,10 +246,15 @@ async function doLogin() {
 
     currentRole = data.role;
     currentStaffName = data.staff_name || data.role;
+    currentShopId = data.shop_id || 1;
+    currentShopName = data.shop_name || 'Shop 1';
+
     localStorage.setItem('zatca_pos_role', currentRole);
     localStorage.setItem('zatca_pos_name', currentStaffName);
+    localStorage.setItem('zatca_pos_shop_id', currentShopId);
+    localStorage.setItem('zatca_pos_shop_name', currentShopName);
 
-    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole})`;
+    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole}) | ${currentShopName}`;
     document.getElementById('loginScreen').classList.add('hidden');
 
     document.querySelectorAll('.admin-only').forEach(el => {
@@ -257,6 +271,8 @@ async function doLogin() {
 function explicitLogout() {
   localStorage.removeItem('zatca_pos_role');
   localStorage.removeItem('zatca_pos_name');
+  localStorage.removeItem('zatca_pos_shop_id');
+  localStorage.removeItem('zatca_pos_shop_name');
   const pinInput = document.getElementById('loginPin');
   pinInput.value = '';
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -264,6 +280,7 @@ function explicitLogout() {
 }
 
 async function init() {
+  await loadShops();
   await loadSettings();
   await loadParties();
   await loadProducts();
@@ -588,6 +605,7 @@ async function submitSale() {
       return_reason: document.getElementById('returnReason').value,
       payment_mode: document.getElementById('salePaymentMode').value,
       created_by: currentStaffName,
+      shop_id: currentShopId,
       items: cart
     };
     const res = await fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -633,7 +651,7 @@ function showReceipt(data, isNewSale = false) {
   document.getElementById('recAddrAr').innerText = company.address_ar || '';
   document.getElementById('recPhone').innerText = company.shop_phone ? `Tel: ${company.shop_phone}` : '';
   document.getElementById('recVat').innerText = company.vat_number;
-  document.getElementById('recDocType').innerText = sale.doc_type;
+  document.getElementById('recDocType').innerText = `${sale.doc_type} [Shop ID: ${sale.shop_id}]`;
   document.getElementById('recInvNo').innerText = sale.invoice_number;
   document.getElementById('recIcv').innerText = sale.icv;
   document.getElementById('recDate').innerText = new Date(sale.created_at).toLocaleString();
@@ -695,7 +713,7 @@ function populateA4Template({ sale, items, company, party }) {
   document.getElementById('a4Title').innerText = isCredit ? 'TAX CREDIT NOTE / إشعار دائن ضريبي' : 'TAX INVOICE / فاتورة ضريبية';
   document.getElementById('a4InvNo').innerText = sale.invoice_number;
   document.getElementById('a4Date').innerText = new Date(sale.created_at).toLocaleString();
-  document.getElementById('a4Status').innerText = sale.zatca_status;
+  document.getElementById('a4Status').innerText = `${sale.zatca_status} (Shop: ${sale.shop_id})`;
 
   document.getElementById('a4CustName').innerText = party ? `${party.name_en} ${party.name_ar ? '/ ' + party.name_ar : ''}` : 'Walk-in Cash Customer';
   document.getElementById('a4CustVat').innerText = (party && party.vat_number) || '-';
@@ -784,11 +802,7 @@ async function sharePdfOnWhatsApp() {
       phone = prompt('Enter Customer WhatsApp Number (e.g. 9665XXXXXXXX):', '966') || '';
     }
     const msg = encodeURIComponent(
-      `*${company.company_name_en}*
-Invoice: *${sale.invoice_number}*
-Total (Incl. 15% VAT): *${sale.grand_total} SAR*
-Net Balance Due: *${sale.new_balance} SAR*
-(Please find the downloaded A4 PDF attached)`
+      `*${company.company_name_en}*\nInvoice: *${sale.invoice_number}*\nTotal (Incl. 15% VAT): *${sale.grand_total} SAR*\nNet Balance Due: *${sale.new_balance} SAR*\n(Please find the downloaded A4 PDF attached)`
     );
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
   } catch (err) {
@@ -900,8 +914,7 @@ async function triggerZatcaBatchSync() {
   const res = await fetch('/api/zatca/sync-batch', { method: 'POST' });
   const data = await res.json();
   if (data.error) return alert('Sync Error: ' + data.error);
-  alert(`ZATCA Z-Close Batch Sync Complete!
-Checked: ${data.total_checked || 0} | Synced: ${data.synced || 0}`);
+  alert(`ZATCA Z-Close Batch Sync Complete!\nChecked: ${data.total_checked || 0} | Synced: ${data.synced || 0}`);
   loadSalesHistory();
   if (currentRole === 'ADMIN' || currentRole === 'SUPERVISOR') loadReports();
 }
@@ -920,6 +933,13 @@ async function shareHistoryInvoiceOnWhatsApp(saleId) {
   lastCompletedReceipt = data;
   populateA4Template(data);
   await sharePdfOnWhatsApp();
+}
+
+async function loadShops() {
+  try {
+    const res = await fetch('/api/shops');
+    shops = await res.json();
+  } catch (e) {}
 }
 
 async function loadParties() {
@@ -1340,6 +1360,7 @@ async function loadStaffUsers() {
       <td class="p-2 font-bold">${u.staff_name}</td>
       <td class="p-2">${u.role}</td>
       <td class="p-2 font-mono">${u.pin}</td>
+      <td class="p-2">${u.shop_name_en || 'Shop 1'}</td>
       <td class="p-2">${u.phone || '-'}</td>
       <td class="p-2"><button onclick="deleteStaffUser(${u.user_id})" class="text-red-600 font-bold">Del</button></td>
     </tr>`;
@@ -1351,6 +1372,7 @@ async function addStaffUser() {
     staff_name: document.getElementById('newStaffName').value,
     role: document.getElementById('newStaffRole').value,
     pin: document.getElementById('newStaffPin').value,
+    shop_id: 1, // Default to Shop 1, can be expanded if needed
     phone: document.getElementById('newStaffPhone').value
   };
   if (!payload.staff_name || payload.pin.length !== 4) return alert('Enter Staff Name & 4-Digit PIN');
@@ -1486,6 +1508,7 @@ async function exportSeparateExcel(type) {
       'Invoice No': r.invoice_number,
       'Date': new Date(r.created_at).toLocaleString(),
       'Doc Type': r.doc_type,
+      'Shop ID': r.shop_id || 1,
       'Original Invoice Ref': r.original_invoice_ref || '',
       'Customer Name': r.party_name || 'Walk-in',
       'Customer VAT No': r.party_vat || '',
