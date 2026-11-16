@@ -25,14 +25,6 @@
       body.print-a4 #a4InvoiceContainer { position: absolute; left: 0; top: 0; width: 210mm; background: white; }
       .no-print { display: none !important; }
     }
-    #qrcode img, #qrcode canvas, #a4QrCode img, #a4QrCode canvas {
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-      background: #ffffff;
-      padding: 6px;
-      border: 1px solid #e2e8f0;
-      margin: 0 auto;
-    }
     @keyframes scanLine {
       0% { top: 15%; }
       50% { top: 82%; }
@@ -49,11 +41,19 @@
       z-index: 30;
       pointer-events: none;
     }
+    #qrcode img, #qrcode canvas, #a4QrCode img, #a4QrCode canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background: #ffffff;
+      padding: 6px;
+      border: 1px solid #e2e8f0;
+      margin: 0 auto;
+    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
 
-  <!-- 4-DIGIT AUTO-LOGIN OVERLAY -->
+  <!-- PERSISTENT LOGIN OVERLAY (NO PULL-TO-REFRESH LOGOUT) -->
   <div id="loginScreen" class="fixed inset-0 bg-slate-900/95 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center space-y-4">
       <div class="text-3xl">🇸🇦</div>
@@ -75,6 +75,7 @@
       <span class="font-bold text-lg tracking-wide">🇸🇦 ZATCA Phase 2 POS</span>
       <span id="envBadge" class="text-xs bg-amber-500 text-black font-semibold px-2 py-0.5 rounded">SANDBOX</span>
       <span id="roleBadge" class="text-xs bg-emerald-950 text-emerald-200 px-2 py-0.5 rounded">ADMIN</span>
+      <span id="offlineBadge" class="hidden text-xs bg-red-600 text-white px-2 py-0.5 rounded font-bold">OFFLINE MODE</span>
     </div>
     <div class="flex flex-wrap gap-1 text-sm">
       <button onclick="showTab('pos')" class="tab-btn bg-emerald-950 px-3 py-1.5 rounded hover:bg-emerald-700">POS / Credit Note</button>
@@ -84,7 +85,7 @@
       <button onclick="showTab('products')" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Products</button>
       <button onclick="showTab('reports')" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">VAT & Z-Close</button>
       <button onclick="showTab('settings')" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Settings & Backup</button>
-      <button onclick="logout()" class="px-2 py-1.5 rounded bg-red-700 hover:bg-red-800 text-xs">Lock</button>
+      <button onclick="explicitLogout()" class="px-2 py-1.5 rounded bg-red-700 hover:bg-red-800 text-xs">Lock</button>
     </div>
   </nav>
 
@@ -94,10 +95,18 @@
     <section id="tab-pos" class="tab-section grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow">
         <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-          <h2 class="font-bold text-lg text-emerald-800">Sales Invoice / Credit Note (15% VAT Incl.)</h2>
+          <div class="flex items-center gap-2">
+            <h2 class="font-bold text-lg text-emerald-800">Sales / Credit Note</h2>
+            <!-- Quick Print Routing Toggle -->
+            <select id="quickPrintToggle" class="border border-emerald-600 text-emerald-900 rounded px-2 py-1 text-xs font-bold bg-emerald-50">
+              <option value="AUTO">🖨️ Auto Route (B2C→Thermal | B2B→A4)</option>
+              <option value="THERMAL">🖨️ Force Thermal (80/58mm)</option>
+              <option value="A4">📄 Force A4 PDF</option>
+            </select>
+          </div>
           <select id="saleDocType" onchange="toggleReturnFields()" class="border rounded px-3 py-1.5 text-sm font-semibold bg-slate-50">
-            <option value="B2C_INVOICE">B2C Simplified Tax Invoice (Instant Print)</option>
-            <option value="B2B_INVOICE">B2B Standard Tax Invoice (Live Clear)</option>
+            <option value="B2C_INVOICE">B2C Simplified Tax Invoice</option>
+            <option value="B2B_INVOICE">B2B Standard Tax Invoice</option>
             <option value="B2C_CREDIT_NOTE">B2C Sales Return (Credit Note)</option>
             <option value="B2B_CREDIT_NOTE">B2B Sales Return (Credit Note)</option>
           </select>
@@ -126,7 +135,7 @@
         <!-- Customer Selection + Live Balance Banner -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
           <div>
-            <select id="saleParty" onchange="updatePartyLiveBalance('SALE')" class="w-full border p-2 rounded text-sm font-semibold"></select>
+            <select id="saleParty" onchange="onPartySelectionChange('SALE')" class="w-full border p-2 rounded text-sm font-semibold"></select>
             <div id="salePartyBalanceBox" class="text-xs mt-1 font-bold text-slate-600 px-1">Balance: 0.00 SAR</div>
           </div>
           <div>
@@ -156,15 +165,16 @@
         </div>
       </div>
 
-      <!-- Checkout Summary & Discreet Cost -->
+      <!-- Checkout Summary & Expandable Discreet Cost -->
       <div class="bg-white p-4 rounded-xl shadow flex flex-col justify-between">
         <div>
           <div class="flex justify-between items-center border-b pb-2 mb-3">
             <h3 class="font-bold text-lg">Bill Summary</h3>
-            <span id="discreetCostBadge" onclick="toggleCostPeek()" title="Staff Ref"
-                  class="text-[11px] font-mono text-slate-400 hover:text-slate-600 cursor-pointer select-none px-1.5 py-0.5 rounded bg-slate-50">
-              •
-            </span>
+            <!-- Expandable Discreet Cost Badge -->
+            <div id="discreetCostBox" onclick="toggleCostPeek()" title="Click to Peek Total Cost"
+                 class="text-xs font-mono font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg cursor-pointer select-none transition-all">
+              COST: <span id="discreetCostVal">•</span>
+            </div>
           </div>
           <div class="space-y-2 text-sm">
             <div class="flex justify-between"><span>Base Amount (Excl. VAT):</span><span id="cartSub" class="font-semibold">0.00 SAR</span></div>
@@ -173,7 +183,6 @@
               <span>Grand Total:</span><span id="cartTotal">0.00 SAR</span>
             </div>
 
-            <!-- Cash Balance Calculator -->
             <div class="pt-3 border-t mt-3 space-y-2">
               <div class="flex items-center justify-between gap-2">
                 <label class="text-xs font-semibold text-slate-600">Cash Received:</label>
@@ -192,10 +201,10 @@
       </div>
     </section>
 
-    <!-- TAB 2: PURCHASE & PURCHASE RETURN -->
+    <!-- TAB 2: PURCHASE & PURCHASE RETURN (Tax-Exclusive Unit Price Entry) -->
     <section id="tab-purchase" class="tab-section hidden bg-white p-4 rounded-xl shadow space-y-4">
       <div class="flex flex-wrap justify-between items-center gap-2">
-        <h2 class="font-bold text-lg text-blue-800">Purchase & Purchase Return (15% VAT Inclusive)</h2>
+        <h2 class="font-bold text-lg text-blue-800">Purchase & Purchase Return (Enter Unit Cost Excl. VAT)</h2>
         <select id="purDocType" onchange="togglePurReturnFields()" class="border rounded px-3 py-1.5 text-sm font-semibold bg-blue-50">
           <option value="PURCHASE">Purchase Invoice</option>
           <option value="PURCHASE_RETURN">Purchase Return (Debit Note)</option>
@@ -223,7 +232,7 @@
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
         <div>
-          <select id="purParty" onchange="updatePartyLiveBalance('PURCHASE')" class="w-full border p-2 rounded text-sm font-semibold"></select>
+          <select id="purParty" onchange="onPartySelectionChange('PURCHASE')" class="w-full border p-2 rounded text-sm font-semibold"></select>
           <div id="purPartyBalanceBox" class="text-xs mt-1 font-bold text-slate-600 px-1">Balance: 0.00 SAR</div>
         </div>
         <input id="supInvNo" type="text" placeholder="Supplier Invoice / Ref No *" class="border p-2 rounded text-sm h-10" />
@@ -241,9 +250,9 @@
             <tr>
               <th class="p-2">Product (EN / AR)</th>
               <th class="p-2 w-24">Qty</th>
-              <th class="p-2 w-28">Unit Cost (Incl. VAT)</th>
+              <th class="p-2 w-36">Unit Cost (Excl. VAT)</th>
               <th class="p-2 w-20">VAT%</th>
-              <th class="p-2 w-28">Total</th>
+              <th class="p-2 w-32">Total (Incl. VAT)</th>
               <th class="p-2 w-10"></th>
             </tr>
           </thead>
@@ -263,7 +272,7 @@
       </div>
     </section>
 
-    <!-- TAB 3: BILLS HISTORY, REPRINT & ZATCA XML DOWNLOAD -->
+    <!-- TAB 3: BILLS HISTORY & REPRINT -->
     <section id="tab-history" class="tab-section hidden bg-white p-4 rounded-xl shadow overflow-x-auto">
       <div class="flex justify-between items-center mb-3">
         <h2 class="font-bold text-lg text-emerald-800">Recent ZATCA Invoices & Credit Notes</h2>
@@ -292,17 +301,23 @@
       </table>
     </section>
 
-    <!-- TAB 4: CUSTOMERS & VENDORS -->
+    <!-- TAB 4: CUSTOMERS & VENDORS (Cash vs Credit Mode) -->
     <section id="tab-parties" class="tab-section hidden grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="bg-white p-4 rounded-xl shadow space-y-4">
         <div class="space-y-2 text-sm">
           <h3 id="partyFormTitle" class="font-bold text-lg text-emerald-800">Add Customer / Vendor</h3>
           <input type="hidden" id="editPartyId" value="" />
-          <select id="pType" class="w-full border p-2 rounded">
-            <option value="CUSTOMER">Customer</option>
-            <option value="VENDOR">Vendor / Supplier</option>
-            <option value="BOTH">Both (Customer & Vendor)</option>
-          </select>
+          <div class="grid grid-cols-2 gap-2">
+            <select id="pType" class="border p-2 rounded">
+              <option value="CUSTOMER">Customer</option>
+              <option value="VENDOR">Vendor / Supplier</option>
+              <option value="BOTH">Both</option>
+            </select>
+            <select id="pAccountMode" class="border p-2 rounded font-semibold text-emerald-800 bg-emerald-50">
+              <option value="CREDIT">Credit Party (Udhaar)</option>
+              <option value="CASH">Cash Party Only</option>
+            </select>
+          </div>
           <input id="pNameEn" placeholder="Name (English - Auto CAPS) *"
                  oninput="this.value=this.value.toUpperCase()"
                  onblur="autoTranslate(this.value, 'pNameAr')" class="w-full border p-2 rounded uppercase" />
@@ -311,10 +326,10 @@
           <input id="pPhone" placeholder="Mobile Number (e.g., 9665XXXXXXXX)" class="w-full border p-2 rounded" />
           <div class="grid grid-cols-2 gap-2">
             <select id="pBalType" class="border p-2 rounded text-xs font-semibold">
-              <option value="RECEIVABLE">Credit Sale (Receivable +)</option>
-              <option value="PAYABLE">Credit Purchase (Payable -)</option>
+              <option value="RECEIVABLE">Receivable (+)</option>
+              <option value="PAYABLE">Payable (-)</option>
             </select>
-            <input id="pOpening" type="number" placeholder="Opening Amount (SAR)" class="border p-2 rounded" />
+            <input id="pOpening" type="number" placeholder="Opening Bal (SAR)" class="border p-2 rounded" />
           </div>
           <div class="flex gap-2">
             <button onclick="saveParty()" class="flex-1 bg-emerald-600 text-white font-bold py-2 rounded">Save Party</button>
@@ -334,7 +349,7 @@
         </div>
 
         <div class="space-y-2 text-sm border-t pt-3">
-          <h3 class="font-bold text-lg">Record Receipt / Payment</h3>
+          <h3 class="font-bold text-lg">Record Receipt / Payment Voucher</h3>
           <select id="vParty" class="w-full border p-2 rounded"></select>
           <select id="vType" class="w-full border p-2 rounded">
             <option value="RECEIPT">Receipt from Customer (Reduces Due)</option>
@@ -342,7 +357,7 @@
           </select>
           <input id="vAmount" type="number" placeholder="Amount (SAR)" class="w-full border p-2 rounded" />
           <input id="vNotes" placeholder="Notes / Ref" class="w-full border p-2 rounded" />
-          <button onclick="saveVoucher()" class="w-full bg-slate-800 text-white font-bold py-2 rounded">Save Voucher</button>
+          <button onclick="saveVoucher()" class="w-full bg-slate-800 text-white font-bold py-2 rounded">Save & Print Voucher</button>
         </div>
       </div>
 
@@ -352,7 +367,7 @@
           <thead class="bg-slate-100">
             <tr>
               <th class="p-2">Name (EN / AR)</th>
-              <th class="p-2">Type</th>
+              <th class="p-2">Type / Mode</th>
               <th class="p-2">VAT No</th>
               <th class="p-2">Phone</th>
               <th class="p-2">Live Balance</th>
@@ -364,13 +379,13 @@
       </div>
     </section>
 
-    <!-- TAB 5: PRODUCTS -->
+    <!-- TAB 5: PRODUCTS (Smart Barcode Scan Stock Add / Edit) -->
     <section id="tab-products" class="tab-section hidden grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
         <h3 id="prodFormTitle" class="font-bold text-lg text-emerald-800">Add / Update Product</h3>
         <input type="hidden" id="editProdId" value="" />
         <div class="flex gap-1">
-          <input id="prodBarcode" placeholder="Barcode" class="flex-1 border p-2 rounded" />
+          <input id="prodBarcode" placeholder="Scan Barcode here..." onkeydown="if(event.key==='Enter') checkProductBarcode(this.value)" class="flex-1 border p-2 rounded" />
           <button onclick="openCameraScanner('PRODUCT_FORM')" class="bg-red-600 text-white px-3 rounded font-bold">📷</button>
         </div>
         <input id="prodNameEn" placeholder="Product Name (AUTO ALL CAPS) *"
@@ -381,7 +396,7 @@
         <input id="prodPrice" type="number" step="any" placeholder="Selling Price (WITH 15% VAT) *" class="w-full border p-2 rounded font-bold border-emerald-500" />
         <div class="grid grid-cols-2 gap-2">
           <input id="prodVat" type="number" value="15" placeholder="VAT %" class="border p-2 rounded" />
-          <input id="prodStock" type="number" step="any" placeholder="Stock Qty" class="border p-2 rounded" />
+          <input id="prodStock" type="number" step="any" placeholder="Stock Qty / Add Qty" class="border p-2 rounded bg-emerald-50 font-bold" />
         </div>
         <div class="flex gap-2">
           <button onclick="saveProduct()" class="flex-1 bg-emerald-600 text-white font-bold py-2 rounded">Save Product</button>
@@ -423,25 +438,37 @@
       </div>
     </section>
 
-    <!-- TAB 6: VAT REPORT, Z-CLOSE SYNC, 4 EXCEL EXPORTS & REGISTER -->
+    <!-- TAB 6: VAT REPORT (QUARTERS, MONTHS, CUSTOM DATES) & Z-CLOSE -->
     <section id="tab-reports" class="tab-section hidden space-y-6">
-      <div class="bg-white p-4 rounded-xl shadow flex flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="text-sm font-semibold">From:</label>
-          <input id="repFrom" type="date" class="border p-1.5 rounded text-sm" />
-          <label class="text-sm font-semibold">To:</label>
-          <input id="repTo" type="date" class="border p-1.5 rounded text-sm" />
-          <button onclick="loadReports()" class="bg-emerald-700 text-white px-4 py-1.5 rounded text-sm font-bold">Generate Reports</button>
-          <button onclick="triggerZatcaBatchSync()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded text-sm font-bold">
-            🔒 Daily Z-Close & Sync ZATCA (<span id="pendingSyncCount">0</span>)
-          </button>
+      <div class="bg-white p-4 rounded-xl shadow space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-bold text-base text-emerald-900">VAT Return & Sales Register Filters</h3>
+          <div class="flex flex-wrap gap-1 text-xs">
+            <button onclick="setVatFilter('CURRENT_MONTH')" class="bg-slate-200 hover:bg-slate-300 px-2.5 py-1 rounded font-semibold">Current Month</button>
+            <button onclick="setVatFilter('Q1')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q1 (Jan-Mar)</button>
+            <button onclick="setVatFilter('Q2')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q2 (Apr-Jun)</button>
+            <button onclick="setVatFilter('Q3')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q3 (Jul-Sep)</button>
+            <button onclick="setVatFilter('Q4')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded font-bold">Q4 (Oct-Dec)</button>
+          </div>
         </div>
 
-        <div class="flex flex-wrap gap-1.5 text-xs">
-          <button onclick="exportSeparateExcel('SALES')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-bold">📥 Sales Excel</button>
-          <button onclick="exportSeparateExcel('SALES_RETURN')" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold">📥 Sales Return Excel</button>
-          <button onclick="exportSeparateExcel('PURCHASE')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold">📥 Purchase Excel</button>
-          <button onclick="exportSeparateExcel('PURCHASE_RETURN')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded font-bold">📥 Purchase Return Excel</button>
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t">
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="text-xs font-semibold">From:</label>
+            <input id="repFrom" type="date" class="border p-1.5 rounded text-xs" />
+            <label class="text-xs font-semibold">To:</label>
+            <input id="repTo" type="date" class="border p-1.5 rounded text-xs" />
+            <button onclick="loadReports()" class="bg-emerald-700 text-white px-4 py-1.5 rounded text-xs font-bold">Apply Filter</button>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5 text-xs">
+            <button onclick="triggerZatcaBatchSync()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold">
+              🔒 Daily Z-Close & Sync ZATCA (<span id="pendingSyncCount">0</span>)
+            </button>
+            <button onclick="exportSeparateExcel('SALES')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-bold">📥 Sales Excel</button>
+            <button onclick="exportSeparateExcel('SALES_RETURN')" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold">📥 Return Excel</button>
+            <button onclick="exportSeparateExcel('PURCHASE')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold">📥 Purchase Excel</button>
+          </div>
         </div>
       </div>
 
@@ -475,10 +502,10 @@
       </div>
     </section>
 
-    <!-- TAB 7: SIMPLIFIED SETTINGS, BANK DETAILS, BACKUP/RESTORE & FACTORY RESET -->
+    <!-- TAB 7: SETTINGS, NATIONAL ADDRESS, BANK DETAILS, BACKUP & MASTER RESET LOCK -->
     <section id="tab-settings" class="tab-section hidden grid grid-cols-1 md:grid-cols-2 gap-6">
       <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
-        <h2 class="font-bold text-lg text-emerald-800">Shop Info, Bank Details & Printer Settings</h2>
+        <h2 class="font-bold text-lg text-emerald-800">Shop Info, ZATCA National Address & Bank Details</h2>
         <div class="grid grid-cols-2 gap-2">
           <input id="setCompEn" placeholder="Shop Name (English)" onblur="autoTranslate(this.value, 'setCompAr')" class="border p-2 rounded" />
           <input id="setCompAr" placeholder="Shop Name (Arabic)" class="border p-2 rounded" />
@@ -491,15 +518,29 @@
           </select>
         </div>
 
-        <!-- Single Arabic Address Box Only -->
-        <input id="setAddr" placeholder="Shop Address (Arabic Only - العنوان بالعربية)" class="w-full border p-2 rounded bg-emerald-50/30" />
+        <input id="setAddr" placeholder="Full Address Arabic Summary" class="w-full border p-2 rounded bg-emerald-50/30" />
 
-        <!-- Bank Details (Bank Name, Account Number & IBAN) -->
+        <!-- ZATCA National Address Fields -->
+        <div class="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200 space-y-2">
+          <div class="font-bold text-xs text-emerald-900 uppercase">ZATCA Saudi National Address (Mandatory for Phase 2)</div>
+          <div class="grid grid-cols-3 gap-2">
+            <input id="setBuildingNo" placeholder="Building No (4 digits)" class="border p-2 rounded bg-white text-xs" />
+            <input id="setStreetName" placeholder="Street Name (Arabic)" class="border p-2 rounded bg-white text-xs col-span-2" />
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <input id="setDistrict" placeholder="District / Area" class="border p-2 rounded bg-white text-xs" />
+            <input id="setCity" placeholder="City (e.g. Jeddah)" value="Jeddah" class="border p-2 rounded bg-white text-xs" />
+            <input id="setPostalCode" placeholder="Postal Code (5 digits)" class="border p-2 rounded bg-white text-xs" />
+          </div>
+          <input id="setAdditionalNo" placeholder="Additional No (4 digits)" class="w-full border p-2 rounded bg-white text-xs" />
+        </div>
+
+        <!-- Bank Details -->
         <div class="p-3 bg-blue-50/60 rounded-lg border border-blue-200 space-y-2">
           <div class="font-bold text-xs text-blue-900 uppercase">Shop Bank Details (Printed on Invoices)</div>
           <input id="setBankName" placeholder="Bank Name (e.g., Al Rajhi Bank / مصرف الراجحي)" class="w-full border p-2 rounded bg-white" />
           <div class="grid grid-cols-2 gap-2">
-            <input id="setBankAcc" placeholder="Account Number (رقم الحساب)" class="border p-2 rounded bg-white font-mono text-xs" />
+            <input id="setBankAcc" placeholder="Account Number" class="border p-2 rounded bg-white font-mono text-xs" />
             <input id="setBankIban" placeholder="IBAN (SA...)" class="border p-2 rounded bg-white font-mono text-xs" />
           </div>
         </div>
@@ -510,14 +551,16 @@
         </div>
 
         <div class="grid grid-cols-3 gap-2">
-          <input id="setAdminPin" maxlength="4" placeholder="Admin PIN (4 digits)" class="border p-2 rounded" />
-          <input id="setCashierPin" maxlength="4" placeholder="Cashier PIN (4 digits)" class="border p-2 rounded" />
+          <input id="setAdminPin" maxlength="4" placeholder="Admin PIN (4)" class="border p-2 rounded" />
+          <input id="setCashierPin" maxlength="4" placeholder="Cashier PIN (4)" class="border p-2 rounded" />
           <select id="setEnv" class="border p-2 rounded">
             <option value="SANDBOX">SANDBOX</option>
             <option value="SIMULATION">SIMULATION</option>
             <option value="PRODUCTION">PRODUCTION</option>
           </select>
         </div>
+
+        <input id="setMasterPass" placeholder="Master Reset Password (default: admin123)" class="w-full border p-2 rounded bg-amber-50 text-xs font-mono font-bold" />
 
         <textarea id="setCsid" rows="2" placeholder="ZATCA Compliance / Production CSID (Base64)" class="w-full border p-2 rounded font-mono text-xs"></textarea>
         <textarea id="setSecret" rows="1" placeholder="ZATCA Secret Key" class="w-full border p-2 rounded font-mono text-xs"></textarea>
@@ -527,7 +570,6 @@
         </button>
       </div>
 
-      <!-- Right Column: Multi-Staff + Backup/Restore + Factory Reset -->
       <div class="space-y-6">
         <div class="bg-white p-4 rounded-xl shadow space-y-3 text-sm">
           <h2 class="font-bold text-lg text-slate-800">Staff Users & 4-Digit PINs</h2>
@@ -548,10 +590,10 @@
           </table>
         </div>
 
-        <!-- BACKUP, RESTORE & RESET TRANSACTIONS -->
+        <!-- BACKUP, RESTORE & MASTER PASSWORD PROTECTED RESET -->
         <div class="bg-white p-4 rounded-xl shadow space-y-4 text-sm border-2 border-amber-200">
-          <h2 class="font-bold text-lg text-amber-900">💾 Full Backup, Restore & Post-Testing Reset</h2>
-          <p class="text-xs text-slate-600">Download a complete JSON backup of all your products, customers, settings, and bills anytime, or restore from a saved backup file.</p>
+          <h2 class="font-bold text-lg text-amber-900">💾 Full Backup, Restore & Master Protected Reset</h2>
+          <p class="text-xs text-slate-600">Download a complete JSON backup of all your products, customers, settings, and bills anytime.</p>
           <div class="grid grid-cols-2 gap-2">
             <button onclick="downloadFullBackup()" class="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs">
               ⬇️ Download Full Backup
@@ -563,14 +605,14 @@
           </div>
 
           <div class="border-t pt-3 space-y-2">
-            <div class="font-bold text-xs text-red-700 uppercase">Reset Transactions After Testing</div>
-            <p class="text-xs text-slate-500">Clears all test invoices, purchases, vouchers, and resets ZATCA ICV counter back to 0 so you can start live business fresh.</p>
+            <div class="font-bold text-xs text-red-700 uppercase">Protected Reset Actions (Requires admin123)</div>
+            <p class="text-xs text-slate-500">Clears test transactions and resets ZATCA ICV counter back to 0.</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button onclick="resetTransactions(true)" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 rounded text-xs">
-                🧹 Reset Bills Only (Keep Items & Parties)
+                🧹 Reset Bills Only
               </button>
               <button onclick="resetTransactions(false)" class="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-3 rounded text-xs">
-                ⚠️ Full Factory Wipe (Zero Everything)
+                ⚠️ Full Factory Wipe
               </button>
             </div>
           </div>
@@ -651,7 +693,6 @@
         <div class="font-bold">Net Balance Due: <span id="recNewBal">0.00</span> SAR</div>
       </div>
 
-      <!-- Shop Bank Details on Thermal Receipt -->
       <div id="recBankBox" class="hidden border-t border-dashed mt-2 pt-1.5 text-center text-[10px] space-y-0.5">
         <div id="recBankName" class="font-bold"></div>
         <div id="recBankAcc"></div>
@@ -679,7 +720,7 @@
     </div>
   </div>
 
-  <!-- HIDDEN A4 TAX INVOICE TEMPLATE FOR PDF GENERATION & A4 PRINTING -->
+  <!-- HIDDEN A4 TAX INVOICE TEMPLATE -->
   <div id="a4Wrapper" class="hidden">
     <div id="a4InvoiceContainer" class="p-8 bg-white text-slate-800 font-sans" style="width: 210mm; min-height: 290mm;">
       <div class="flex justify-between items-start border-b-2 border-emerald-700 pb-4 mb-6">
@@ -731,7 +772,6 @@
       <div class="flex justify-between items-start mt-6">
         <div class="space-y-3">
           <div id="a4QrCode" class="p-2 border rounded bg-white inline-block"></div>
-          <!-- Shop Bank Details on A4 Invoice -->
           <div id="a4BankBox" class="hidden p-3 bg-slate-50 border rounded-lg text-xs space-y-1 max-w-sm">
             <div class="font-bold text-emerald-900 uppercase">Bank Transfer Details / البيانات البنكية</div>
             <div>Bank: <strong id="a4BankName"></strong></div>

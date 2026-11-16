@@ -1,4 +1,3 @@
--- 1. Organization & ZATCA Phase 2 Settings
 CREATE TABLE IF NOT EXISTS company_settings (
     id SERIAL PRIMARY KEY,
     company_name_en VARCHAR(150) NOT NULL DEFAULT 'My Retail Store',
@@ -7,6 +6,12 @@ CREATE TABLE IF NOT EXISTS company_settings (
     vat_number VARCHAR(15) NOT NULL DEFAULT '300000000000003',
     cr_number VARCHAR(20) DEFAULT '1010000000',
     address_ar TEXT DEFAULT 'جدة، المملكة العربية السعودية',
+    building_no VARCHAR(10) DEFAULT '',
+    street_name VARCHAR(100) DEFAULT '',
+    district VARCHAR(100) DEFAULT '',
+    city VARCHAR(100) DEFAULT 'Jeddah',
+    postal_code VARCHAR(10) DEFAULT '',
+    additional_no VARCHAR(10) DEFAULT '',
     bank_name VARCHAR(100) DEFAULT '',
     bank_account_no VARCHAR(60) DEFAULT '',
     bank_iban VARCHAR(60) DEFAULT '',
@@ -18,6 +23,7 @@ CREATE TABLE IF NOT EXISTS company_settings (
     secret_key TEXT,
     admin_pin VARCHAR(20) DEFAULT '1234',
     cashier_pin VARCHAR(20) DEFAULT '0000',
+    master_reset_pass VARCHAR(30) DEFAULT 'admin123',
     last_icv INTEGER DEFAULT 0,
     last_pih TEXT DEFAULT 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ=='
 );
@@ -26,7 +32,6 @@ INSERT INTO company_settings (id, company_name_en, company_name_ar, vat_number, 
 VALUES (1, 'Saudi Retail Store', 'متجر التجزئة السعودي', '300000000000003', 0)
 ON CONFLICT (id) DO NOTHING;
 
--- 2. Staff Users Table
 CREATE TABLE IF NOT EXISTS staff_users (
     user_id SERIAL PRIMARY KEY,
     staff_name VARCHAR(100) NOT NULL,
@@ -38,10 +43,10 @@ CREATE TABLE IF NOT EXISTS staff_users (
 INSERT INTO staff_users (staff_name, role, pin) VALUES ('Owner / Admin', 'ADMIN', '1234') ON CONFLICT (pin) DO NOTHING;
 INSERT INTO staff_users (staff_name, role, pin) VALUES ('Counter Cashier 1', 'CASHIER', '0000') ON CONFLICT (pin) DO NOTHING;
 
--- 3. Customers & Vendors Master
 CREATE TABLE IF NOT EXISTS parties (
     party_id SERIAL PRIMARY KEY,
     party_type VARCHAR(15) CHECK (party_type IN ('CUSTOMER', 'VENDOR', 'BOTH')) NOT NULL,
+    account_mode VARCHAR(15) CHECK (account_mode IN ('CASH', 'CREDIT')) DEFAULT 'CREDIT',
     name_en VARCHAR(150) NOT NULL,
     name_ar VARCHAR(150),
     vat_number VARCHAR(15),
@@ -52,11 +57,10 @@ CREATE TABLE IF NOT EXISTS parties (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO parties (party_id, party_type, name_en, name_ar, opening_balance)
-VALUES (1, 'CUSTOMER', 'WALK-IN CASH CUSTOMER', 'عميل نقدي', 0.00)
+INSERT INTO parties (party_id, party_type, account_mode, name_en, name_ar, opening_balance)
+VALUES (1, 'CUSTOMER', 'CASH', 'WALK-IN CASH CUSTOMER', 'عميل نقدي', 0.00)
 ON CONFLICT (party_id) DO NOTHING;
 
--- 4. Products & Inventory Master
 CREATE TABLE IF NOT EXISTS products (
     product_id SERIAL PRIMARY KEY,
     barcode VARCHAR(50) UNIQUE,
@@ -68,7 +72,6 @@ CREATE TABLE IF NOT EXISTS products (
     stock_qty NUMERIC(12, 3) DEFAULT 0.000
 );
 
--- 5. Sales & Sales Return (Credit Note)
 CREATE TABLE IF NOT EXISTS sales_transactions (
     sale_id SERIAL PRIMARY KEY,
     invoice_number VARCHAR(50) UNIQUE NOT NULL,
@@ -94,7 +97,6 @@ CREATE TABLE IF NOT EXISTS sales_transactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Purchase & Purchase Return (Debit Note)
 CREATE TABLE IF NOT EXISTS purchase_transactions (
     purchase_id SERIAL PRIMARY KEY,
     voucher_number VARCHAR(50) UNIQUE NOT NULL,
@@ -110,7 +112,6 @@ CREATE TABLE IF NOT EXISTS purchase_transactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. Transaction Line Items
 CREATE TABLE IF NOT EXISTS transaction_items (
     item_id SERIAL PRIMARY KEY,
     ref_type VARCHAR(15) CHECK (ref_type IN ('SALE', 'PURCHASE')) NOT NULL,
@@ -123,7 +124,6 @@ CREATE TABLE IF NOT EXISTS transaction_items (
     line_total NUMERIC(12, 2) NOT NULL
 );
 
--- 8. Receipts & Payments
 CREATE TABLE IF NOT EXISTS party_vouchers (
     voucher_id SERIAL PRIMARY KEY,
     voucher_no VARCHAR(50) UNIQUE NOT NULL,

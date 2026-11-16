@@ -8,7 +8,7 @@ let appSettings = {};
 let html5QrScanner = null;
 let scanTarget = 'SALE';
 let lastCompletedReceipt = null;
-let costPeekVisible = false;
+let costPeekActive = false;
 let loginInProgress = false;
 
 const RETAIL_DICT = {
@@ -43,7 +43,30 @@ async function autoTranslate(text, targetInputId) {
   }).join(' ');
 }
 
-// 4-Digit Auto-Login
+// Check persisted login on load (Prevents pull-to-refresh logout)
+window.addEventListener('DOMContentLoaded', () => {
+  const savedRole = localStorage.getItem('zatca_pos_role');
+  const savedName = localStorage.getItem('zatca_pos_name');
+  if (savedRole && savedName) {
+    currentRole = savedRole;
+    currentStaffName = savedName;
+    document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole})`;
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.querySelectorAll('.admin-only').forEach(el => {
+      if (currentRole === 'CASHIER') el.classList.add('hidden');
+      else el.classList.remove('hidden');
+    });
+    init();
+  } else {
+    document.getElementById('loginPin').focus();
+  }
+
+  // Check online/offline status
+  window.addEventListener('online', () => document.getElementById('offlineBadge').classList.add('hidden'));
+  window.addEventListener('offline', () => document.getElementById('offlineBadge').classList.remove('hidden'));
+  if (!navigator.onLine) document.getElementById('offlineBadge').classList.remove('hidden');
+});
+
 async function doLogin() {
   if (loginInProgress) return;
   const pinInput = document.getElementById('loginPin');
@@ -68,6 +91,9 @@ async function doLogin() {
 
     currentRole = data.role;
     currentStaffName = data.staff_name || data.role;
+    localStorage.setItem('zatca_pos_role', currentRole);
+    localStorage.setItem('zatca_pos_name', currentStaffName);
+
     document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole})`;
     document.getElementById('loginScreen').classList.add('hidden');
 
@@ -82,7 +108,9 @@ async function doLogin() {
   }
 }
 
-function logout() {
+function explicitLogout() {
+  localStorage.removeItem('zatca_pos_role');
+  localStorage.removeItem('zatca_pos_name');
   const pinInput = document.getElementById('loginPin');
   pinInput.value = '';
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -94,7 +122,7 @@ async function init() {
   await loadParties();
   await loadProducts();
   if (currentRole === 'ADMIN') {
-    loadReports();
+    setVatFilter('CURRENT_MONTH');
     loadStaffUsers();
   }
 }
@@ -118,6 +146,24 @@ function togglePurReturnFields() {
   const box = document.getElementById('purReturnFields');
   if (docType === 'PURCHASE_RETURN') box.classList.remove('hidden');
   else box.classList.add('hidden');
+}
+
+// Smart Party selection (Cash vs Credit account mode auto-switch payment mode)
+function onPartySelectionChange(mode) {
+  const selId = mode === 'SALE' ? 'saleParty' : 'purParty';
+  const payModeId = mode === 'SALE' ? 'salePaymentMode' : 'purPayMode';
+  const partyId = Number(document.getElementById(selId).value);
+  const p = parties.find(x => x.party_id === partyId);
+  updatePartyLiveBalance(mode);
+
+  if (p) {
+    const paySel = document.getElementById(payModeId);
+    if (p.account_mode === 'CASH') {
+      paySel.value = 'CASH';
+    } else if (p.account_mode === 'CREDIT') {
+      paySel.value = 'CREDIT';
+    }
+  }
 }
 
 // --- LIVE SEARCH DROPDOWN ---
@@ -151,7 +197,7 @@ function showLiveSearchDropdown(query, mode) {
         <div class="font-bold text-slate-800">${p.name_en} <span class="text-slate-500">(${p.name_ar || ''})</span></div>
         <div class="text-[11px] text-slate-400">Barcode: ${p.barcode || 'N/A'} | Stock: ${p.stock_qty}</div>
       </div>
-      <div class="font-extrabold text-emerald-700 text-sm">${Number(p.selling_price).toFixed(2)} SAR</div>
+      <div class="font-extrabold text-emerald-700 text-sm">${Number(mode === 'SALE' ? p.selling_price : (p.cost_price || p.selling_price)).toFixed(2)} SAR</div>
     </div>
   `).join('');
   box.classList.remove('hidden');
@@ -184,7 +230,7 @@ function selectFromDropdown(productId, mode) {
   }
 }
 
-// --- SINGLE-SHOT MOBILE CAMERA BARCODE SCANNER ---
+// --- BARCODE SCANNER ---
 function playBeep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -214,7 +260,7 @@ async function openCameraScanner(target) {
         playBeep();
         await closeCameraScanner();
         if (scanTarget === 'PRODUCT_FORM') {
-          document.getElementById('prodBarcode').value = decodedText;
+          checkProductBarcode(decodedText);
         } else {
           handleBarcodeScan(decodedText, scanTarget);
         }
@@ -294,7 +340,23 @@ async function saveQuickProduct() {
   else addProductObjectToPurCart(newProd);
 }
 
-// --- SMART CART & DISCREET COST ---
+// --- SMART PRODUCTS TAB BARCODE SCAN (EDIT OR STOCK ADD) ---
+function checkProductBarcode(barcode) {
+  const code = (barcode || '').trim();
+  if (!code) return;
+  document.getElementById('prodBarcode').value = code;
+  const pr = products.find(p => p.barcode && p.barcode.toLowerCase() === code.toLowerCase());
+  if (pr) {
+    editProduct(pr.product_id);
+    document.getElementById('prodStock').focus();
+    document.getElementById('prodStock').select();
+  } else {
+    document.getElementById('prodNameEn').focus();
+    autoTranslate(code, 'prodNameAr');
+  }
+}
+
+// --- SMART CART & EXPANDABLE DISCREET COST ---
 function addProductToSaleCart(prod) {
   const existing = cart.find(c => c.product_id === prod.product_id);
   if (existing) {
@@ -310,23 +372,23 @@ function addProductToSaleCart(prod) {
       vat_rate: Number(prod.vat_rate ?? 15)
     });
   }
-  updateDiscreetCost(prod.cost_price);
+  updateTotalCostDisplay();
   renderCart();
 }
 
-function updateDiscreetCost(cost) {
-  const badge = document.getElementById('discreetCostBadge');
-  const code = String(Math.round(Number(cost || 0) * 100)).padStart(4, '0');
-  badge.dataset.code = `R-${code}`;
-  badge.innerText = costPeekVisible ? `R-${code}` : `•${code}`;
+function updateTotalCostDisplay() {
+  const valSpan = document.getElementById('discreetCostVal');
+  let totalCost = cart.reduce((acc, item) => acc + (Number(item.cost_price || 0) * Number(item.qty)), 0);
+  if (costPeekActive) {
+    valSpan.innerText = `${totalCost.toFixed(2)} SAR`;
+  } else {
+    valSpan.innerText = '•';
+  }
 }
 
 function toggleCostPeek() {
-  costPeekVisible = !costPeekVisible;
-  const badge = document.getElementById('discreetCostBadge');
-  if (badge.dataset.code) {
-    badge.innerText = costPeekVisible ? badge.dataset.code : '•';
-  }
+  costPeekActive = !costPeekActive;
+  updateTotalCostDisplay();
 }
 
 function renderCart() {
@@ -343,7 +405,7 @@ function renderCart() {
     totalBaseExcl += lineBase;
     totalVat += lineVat;
 
-    tbody.innerHTML += `<tr class="border-t" onclick="updateDiscreetCost(${item.cost_price})">
+    tbody.innerHTML += `<tr class="border-t">
       <td class="p-2">
         <div class="font-bold">${item.name_en}</div>
         <div class="text-xs text-slate-500">${item.name_ar}</div>
@@ -359,6 +421,7 @@ function renderCart() {
   document.getElementById('cartSub').innerText = totalBaseExcl.toFixed(2) + ' SAR';
   document.getElementById('cartVat').innerText = totalVat.toFixed(2) + ' SAR';
   document.getElementById('cartTotal').innerText = totalIncl.toFixed(2) + ' SAR';
+  updateTotalCostDisplay();
   calcChange();
 }
 
@@ -420,7 +483,7 @@ function updatePartyLiveBalance(mode) {
   }
 }
 
-// --- RECEIPT (80mm / 58mm), BANK DETAILS, A4 PDF PRINT & WHATSAPP PDF SHARE ---
+// --- RECEIPT & SMART AUTO-PRINT ROUTING ---
 function showReceipt(data, isNewSale = false) {
   lastCompletedReceipt = data;
   const { sale, items, company, party } = data;
@@ -443,7 +506,6 @@ function showReceipt(data, isNewSale = false) {
   document.getElementById('recPrevBal').innerText = Number(sale.prev_balance || 0).toFixed(2);
   document.getElementById('recNewBal').innerText = Number(sale.new_balance || 0).toFixed(2);
 
-  // Bank Details on Thermal Receipt
   const recBankBox = document.getElementById('recBankBox');
   if (company.bank_name || company.bank_account_no || company.bank_iban) {
     recBankBox.classList.remove('hidden');
@@ -461,23 +523,23 @@ function showReceipt(data, isNewSale = false) {
   });
 
   const is58 = (company.paper_size || appSettings.paper_size) === '58mm';
-  const qrSize = is58 ? 165 : 210;
   const qrDiv = document.getElementById('qrcode');
   qrDiv.innerHTML = '';
-  new QRCode(qrDiv, {
-    text: sale.qr_code_base64,
-    width: qrSize,
-    height: qrSize,
-    colorDark: '#000000',
-    colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.L
-  });
+  new QRCode(qrDiv, { text: sale.qr_code_base64, width: is58 ? 165 : 210, height: is58 ? 165 : 210, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
 
   populateA4Template(data);
   document.getElementById('receiptModal').classList.remove('hidden');
 
   if (isNewSale && (company.auto_print !== false)) {
-    setTimeout(() => printThermalReceipt(), 180);
+    setTimeout(() => {
+      const routing = document.getElementById('quickPrintToggle').value;
+      const isB2B = sale.doc_type.startsWith('B2B');
+      if (routing === 'A4' || (routing === 'AUTO' && isB2B)) {
+        printA4Invoice();
+      } else {
+        printThermalReceipt();
+      }
+    }, 180);
   }
 }
 
@@ -490,9 +552,7 @@ function populateA4Template({ sale, items, company, party }) {
   document.getElementById('a4Addr').innerText = company.address_ar || '';
 
   const isCredit = sale.doc_type.includes('CREDIT_NOTE');
-  document.getElementById('a4Title').innerText = isCredit
-    ? 'TAX CREDIT NOTE / إشعار دائن ضريبي'
-    : 'TAX INVOICE / فاتورة ضريبية';
+  document.getElementById('a4Title').innerText = isCredit ? 'TAX CREDIT NOTE / إشعار دائن ضريبي' : 'TAX INVOICE / فاتورة ضريبية';
   document.getElementById('a4InvNo').innerText = sale.invoice_number;
   document.getElementById('a4Date').innerText = new Date(sale.created_at).toLocaleString();
   document.getElementById('a4Status').innerText = sale.zatca_status;
@@ -511,7 +571,6 @@ function populateA4Template({ sale, items, company, party }) {
     document.getElementById('a4OrigRefRow').classList.add('hidden');
   }
 
-  // Bank Details on A4 PDF
   const a4BankBox = document.getElementById('a4BankBox');
   if (company.bank_name || company.bank_account_no || company.bank_iban) {
     a4BankBox.classList.remove('hidden');
@@ -542,14 +601,7 @@ function populateA4Template({ sale, items, company, party }) {
 
   const a4Qr = document.getElementById('a4QrCode');
   a4Qr.innerHTML = '';
-  new QRCode(a4Qr, {
-    text: sale.qr_code_base64,
-    width: 195,
-    height: 195,
-    colorDark: '#000000',
-    colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.L
-  });
+  new QRCode(a4Qr, { text: sale.qr_code_base64, width: 195, height: 195, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
 }
 
 function printThermalReceipt() {
@@ -609,11 +661,7 @@ async function sharePdfOnWhatsApp() {
       phone = prompt('Enter Customer WhatsApp Number (e.g. 9665XXXXXXXX):', '966') || '';
     }
     const msg = encodeURIComponent(
-      `*${company.company_name_en}*
-Invoice: *${sale.invoice_number}*
-Total (Incl. 15% VAT): *${sale.grand_total} SAR*
-Net Balance Due: *${sale.new_balance} SAR*
-(Please find the downloaded A4 PDF attached)`
+      `*${company.company_name_en}*\nInvoice: *${sale.invoice_number}*\nTotal (Incl. 15% VAT): *${sale.grand_total} SAR*\nNet Balance Due: *${sale.new_balance} SAR*\n(Please find the downloaded A4 PDF attached)`
     );
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
   } catch (err) {
@@ -622,9 +670,10 @@ Net Balance Due: *${sale.new_balance} SAR*
   }
 }
 
-// --- PURCHASE & PURCHASE RETURN ---
+// --- PURCHASE (TAX-EXCLUSIVE UNIT COST) ---
 function addProductObjectToPurCart(prod) {
   const existing = purCart.find(c => c.product_id === prod.product_id);
+  const defaultExcl = Number(prod.cost_price || prod.selling_price) / 1.15;
   if (existing) {
     existing.qty += 1;
   } else {
@@ -633,7 +682,7 @@ function addProductObjectToPurCart(prod) {
       name_en: prod.name_en,
       name_ar: prod.name_ar,
       qty: 1,
-      unit_price: Number(prod.cost_price || prod.selling_price),
+      unit_price_excl: Number(defaultExcl.toFixed(4)),
       vat_rate: Number(prod.vat_rate ?? 15)
     });
   }
@@ -646,9 +695,12 @@ function renderPurCart() {
   let totIncl = 0, totBase = 0, totVat = 0;
 
   purCart.forEach((item, idx) => {
-    const lineIncl = item.qty * item.unit_price;
-    const lineBase = lineIncl / (1 + item.vat_rate / 100);
-    const lineVat = lineIncl - lineBase;
+    const qty = Number(item.qty);
+    const unitExcl = Number(item.unit_price_excl);
+    const vatRate = Number(item.vat_rate);
+    const lineBase = qty * unitExcl;
+    const lineVat = lineBase * (vatRate / 100);
+    const lineIncl = lineBase + lineVat;
 
     totIncl += lineIncl;
     totBase += lineBase;
@@ -657,9 +709,9 @@ function renderPurCart() {
     tbody.innerHTML += `<tr class="border-t">
       <td class="p-2">${item.name_en} <span class="text-xs text-slate-500">(${item.name_ar || ''})</span></td>
       <td class="p-2"><input type="number" step="any" value="${item.qty}" onchange="purCart[${idx}].qty=Number(this.value);renderPurCart()" class="w-20 border p-1 rounded" /></td>
-      <td class="p-2"><input type="number" step="any" value="${item.unit_price}" onchange="purCart[${idx}].unit_price=Number(this.value);renderPurCart()" class="w-24 border p-1 rounded" /></td>
+      <td class="p-2"><input type="number" step="any" value="${item.unit_price_excl}" onchange="purCart[${idx}].unit_price_excl=Number(this.value);renderPurCart()" class="w-32 border p-1 rounded font-bold" /></td>
       <td class="p-2">${item.vat_rate}%</td>
-      <td class="p-2 font-semibold">${lineIncl.toFixed(2)}</td>
+      <td class="p-2 font-semibold text-blue-800">${lineIncl.toFixed(2)}</td>
       <td class="p-2"><button onclick="purCart.splice(${idx},1);renderPurCart()" class="text-red-600 font-bold">X</button></td>
     </tr>`;
   });
@@ -678,7 +730,7 @@ async function submitPurchase() {
     original_purchase_ref: document.getElementById('origPurRef').value,
     return_reason: document.getElementById('purReturnReason').value,
     payment_mode: document.getElementById('purPayMode').value,
-    items: purCart
+    items: purCart.map(i => ({ product_id: i.product_id, qty: i.qty, unit_price: i.unit_price_excl, vat_rate: i.vat_rate }))
   };
   const res = await fetch('/api/purchases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await res.json();
@@ -692,7 +744,6 @@ async function submitPurchase() {
   alert('Purchase / Return Transaction Saved!');
 }
 
-// --- SALES HISTORY & ZATCA BATCH SYNC ---
 async function loadSalesHistory() {
   const res = await fetch('/api/sales');
   const rows = await res.json();
@@ -722,8 +773,7 @@ async function triggerZatcaBatchSync() {
   const res = await fetch('/api/zatca/sync-batch', { method: 'POST' });
   const data = await res.json();
   if (data.error) return alert('Sync Error: ' + data.error);
-  alert(`ZATCA Z-Close Batch Sync Complete!
-Checked: ${data.total_checked || 0} | Synced: ${data.synced || 0}`);
+  alert(`ZATCA Z-Close Batch Sync Complete!\nChecked: ${data.total_checked || 0} | Synced: ${data.synced || 0}`);
   loadSalesHistory();
   if (currentRole === 'ADMIN') loadReports();
 }
@@ -735,7 +785,6 @@ async function reprintInvoice(saleId) {
   showReceipt(data, false);
 }
 
-// --- PARTIES ---
 async function loadParties() {
   const res = await fetch('/api/parties');
   parties = await res.json();
@@ -753,14 +802,14 @@ async function loadParties() {
   parties.forEach(p => {
     const bal = Number(p.current_balance || 0);
     const balTag = bal !== 0 ? ` [Bal: ${bal.toFixed(2)}]` : '';
-    const opt = `<option value="${p.party_id}">${p.name_en} (${p.party_type})${balTag}</option>`;
+    const opt = `<option value="${p.party_id}">${p.name_en} (${p.party_type} - ${p.account_mode})${balTag}</option>`;
     saleSel.innerHTML += opt;
     purSel.innerHTML += opt;
     vSel.innerHTML += opt;
 
     tbody.innerHTML += `<tr class="border-t hover:bg-slate-50">
       <td class="p-2 font-semibold">${p.name_en} <br><span class="text-slate-500">${p.name_ar || ''}</span></td>
-      <td class="p-2">${p.party_type}</td>
+      <td class="p-2">${p.party_type} <span class="text-xs bg-slate-200 px-1 rounded">${p.account_mode}</span></td>
       <td class="p-2">${p.vat_number || '-'}</td>
       <td class="p-2">${p.phone || '-'}</td>
       <td class="p-2 font-bold ${bal > 0 ? 'text-red-600' : (bal < 0 ? 'text-blue-700' : 'text-emerald-700')}">${bal.toFixed(2)} SAR</td>
@@ -771,8 +820,8 @@ async function loadParties() {
     </tr>`;
   });
 
-  updatePartyLiveBalance('SALE');
-  updatePartyLiveBalance('PURCHASE');
+  onPartySelectionChange('SALE');
+  onPartySelectionChange('PURCHASE');
 }
 
 function editParty(id) {
@@ -781,6 +830,7 @@ function editParty(id) {
   document.getElementById('editPartyId').value = p.party_id;
   document.getElementById('partyFormTitle').innerText = `Edit Party #${p.party_id}`;
   document.getElementById('pType').value = p.party_type;
+  document.getElementById('pAccountMode').value = p.account_mode || 'CREDIT';
   document.getElementById('pNameEn').value = p.name_en;
   document.getElementById('pNameAr').value = p.name_ar || '';
   document.getElementById('pVat').value = p.vat_number || '';
@@ -795,6 +845,7 @@ function editParty(id) {
 function resetPartyForm() {
   document.getElementById('editPartyId').value = '';
   document.getElementById('partyFormTitle').innerText = 'Add Customer / Vendor';
+  document.getElementById('pAccountMode').value = 'CREDIT';
   document.getElementById('pNameEn').value = '';
   document.getElementById('pNameAr').value = '';
   document.getElementById('pVat').value = '';
@@ -811,6 +862,7 @@ async function saveParty() {
 
   const payload = {
     party_type: document.getElementById('pType').value,
+    account_mode: document.getElementById('pAccountMode').value,
     name_en: document.getElementById('pNameEn').value.toUpperCase(),
     name_ar: document.getElementById('pNameAr').value,
     vat_number: document.getElementById('pVat').value,
@@ -837,8 +889,8 @@ async function deleteParty(id) {
 
 function downloadPartyTemplate() {
   const sample = [
-    { Party_Type: 'CUSTOMER', Name_EN: 'AL NOOR TRADING', Name_AR: 'تجارة النور', VAT_Number: '300123456700003', Phone: '966500000001', Opening_Balance: 500 },
-    { Party_Type: 'VENDOR', Name_EN: 'JEDDAH WHOLESALE SUPPLIERS', Name_AR: 'موردو جدة بالجملة', VAT_Number: '300987654300003', Phone: '966500000002', Opening_Balance: -1200 }
+    { Party_Type: 'CUSTOMER', Account_Mode: 'CREDIT', Name_EN: 'AL NOOR TRADING', Name_AR: 'تجارة النور', VAT_Number: '300123456700003', Phone: '966500000001', Opening_Balance: 500 },
+    { Party_Type: 'VENDOR', Account_Mode: 'CREDIT', Name_EN: 'JEDDAH WHOLESALE SUPPLIERS', Name_AR: 'موردو جدة بالجملة', VAT_Number: '300987654300003', Phone: '966500000002', Opening_Balance: -1200 }
   ];
   const ws = XLSX.utils.json_to_sheet(sample);
   const wb = XLSX.utils.book_new();
@@ -855,6 +907,7 @@ function uploadPartyExcel(event) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
     const list = rows.map(r => ({
       party_type: (r.Party_Type || 'CUSTOMER').toUpperCase(),
+      account_mode: (r.Account_Mode || 'CREDIT').toUpperCase(),
       name_en: r.Name_EN || r.Name,
       name_ar: r.Name_AR || '',
       vat_number: r.VAT_Number || '',
@@ -971,7 +1024,7 @@ async function saveProduct() {
   await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   resetProductForm();
   loadProducts();
-  alert('Product Saved!');
+  alert('Product Saved & Stock Updated!');
 }
 
 async function deleteProduct(id) {
@@ -1021,7 +1074,7 @@ function uploadProductExcel(event) {
   reader.readAsBinaryString(file);
 }
 
-// --- SETTINGS, BACKUP, RESTORE & FACTORY RESET ---
+// --- SETTINGS, BACKUP, RESTORE & MASTER RESET PASSWORD ---
 async function loadSettings() {
   const res = await fetch('/api/settings');
   const data = await res.json();
@@ -1033,6 +1086,12 @@ async function loadSettings() {
     document.getElementById('setVat').value = data.vat_number || '';
     document.getElementById('setCr').value = data.cr_number || '';
     document.getElementById('setAddr').value = data.address_ar || '';
+    document.getElementById('setBuildingNo').value = data.building_no || '';
+    document.getElementById('setStreetName').value = data.street_name || '';
+    document.getElementById('setDistrict').value = data.district || '';
+    document.getElementById('setCity').value = data.city || 'Jeddah';
+    document.getElementById('setPostalCode').value = data.postal_code || '';
+    document.getElementById('setAdditionalNo').value = data.additional_no || '';
     document.getElementById('setBankName').value = data.bank_name || '';
     document.getElementById('setBankAcc').value = data.bank_account_no || '';
     document.getElementById('setBankIban').value = data.bank_iban || '';
@@ -1044,6 +1103,7 @@ async function loadSettings() {
     document.getElementById('setPrivKey').value = data.private_key || '';
     document.getElementById('setAdminPin').value = data.admin_pin || '1234';
     document.getElementById('setCashierPin').value = data.cashier_pin || '0000';
+    document.getElementById('setMasterPass').value = data.master_reset_pass || 'admin123';
     document.getElementById('envBadge').innerText = data.zatca_env || 'SANDBOX';
   }
 }
@@ -1056,6 +1116,12 @@ async function saveSettings() {
     vat_number: document.getElementById('setVat').value,
     cr_number: document.getElementById('setCr').value,
     address_ar: document.getElementById('setAddr').value,
+    building_no: document.getElementById('setBuildingNo').value,
+    street_name: document.getElementById('setStreetName').value,
+    district: document.getElementById('setDistrict').value,
+    city: document.getElementById('setCity').value,
+    postal_code: document.getElementById('setPostalCode').value,
+    additional_no: document.getElementById('setAdditionalNo').value,
     bank_name: document.getElementById('setBankName').value,
     bank_account_no: document.getElementById('setBankAcc').value,
     bank_iban: document.getElementById('setBankIban').value,
@@ -1066,7 +1132,8 @@ async function saveSettings() {
     secret_key: document.getElementById('setSecret').value,
     private_key: document.getElementById('setPrivKey').value,
     admin_pin: document.getElementById('setAdminPin').value,
-    cashier_pin: document.getElementById('setCashierPin').value
+    cashier_pin: document.getElementById('setCashierPin').value,
+    master_reset_pass: document.getElementById('setMasterPass').value
   };
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   alert('All Settings Saved!');
@@ -1080,7 +1147,8 @@ function downloadFullBackup() {
 function restoreFullBackup(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (!confirm('Restoring backup will overwrite current database records with the backup file. Continue?')) return;
+  const master_password = prompt('Enter Master Security Password (default: admin123) to Restore Backup:', '');
+  if (!master_password) return;
 
   const reader = new FileReader();
   reader.onload = async (e) => {
@@ -1089,7 +1157,7 @@ function restoreFullBackup(event) {
       const res = await fetch('/api/system/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(jsonObj)
+        body: JSON.stringify({ data: jsonObj.data, master_password })
       });
       const out = await res.json();
       if (out.error) return alert('Restore Failed: ' + out.error);
@@ -1103,15 +1171,16 @@ function restoreFullBackup(event) {
 }
 
 async function resetTransactions(keepMasterData) {
-  const msg = keepMasterData
-    ? 'RESET BILLS ONLY: All test invoices, purchases, vouchers, and balances will be cleared to ZERO (Products & Customers will remain). Are you sure?'
-    : 'FULL FACTORY WIPE: ALL bills, purchases, products, and customers will be wiped to ZERO! Please download a backup first. Continue?';
+  const master_password = prompt('Enter Master Security Password (default: admin123) to authorize reset:', '');
+  if (!master_password) return;
+
+  const msg = keepMasterData ? 'RESET BILLS ONLY: All test invoices and balances will be cleared to ZERO. Continue?' : 'FULL FACTORY WIPE: ALL data will be wiped to ZERO! Continue?';
   if (!confirm(msg)) return;
 
   const res = await fetch('/api/system/reset-transactions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keepMasterData })
+    body: JSON.stringify({ keepMasterData, master_password })
   });
   const out = await res.json();
   if (out.error) return alert('Reset Failed: ' + out.error);
@@ -1119,7 +1188,6 @@ async function resetTransactions(keepMasterData) {
   init();
 }
 
-// --- MULTI-STAFF ---
 async function loadStaffUsers() {
   const res = await fetch('/api/staff');
   const list = await res.json();
@@ -1155,7 +1223,36 @@ async function deleteStaffUser(id) {
   loadStaffUsers();
 }
 
-// --- REPORTS & 4 SEPARATE EXCEL EXPORTS ---
+// --- VAT REPORT FILTERING (QUARTERS, MONTHS, CUSTOM DATES) ---
+function setVatFilter(type) {
+  const now = new Date();
+  const year = now.getFullYear();
+  let startStr = '', endStr = '';
+
+  if (type === 'CURRENT_MONTH') {
+    const firstDay = new Date(year, now.getMonth(), 1);
+    const lastDay = new Date(year, now.getMonth() + 1, 0);
+    startStr = firstDay.toISOString().slice(0, 10);
+    endStr = lastDay.toISOString().slice(0, 10);
+  } else if (type === 'Q1') {
+    startStr = `${year}-01-01`;
+    endStr = `${year}-03-31`;
+  } else if (type === 'Q2') {
+    startStr = `${year}-04-01`;
+    endStr = `${year}-06-30`;
+  } else if (type === 'Q3') {
+    startStr = `${year}-07-01`;
+    endStr = `${year}-09-30`;
+  } else if (type === 'Q4') {
+    startStr = `${year}-10-01`;
+    endStr = `${year}-12-31`;
+  }
+
+  document.getElementById('repFrom').value = startStr;
+  document.getElementById('repTo').value = endStr;
+  loadReports();
+}
+
 async function loadReports() {
   const from = document.getElementById('repFrom').value;
   const to = document.getElementById('repTo').value;

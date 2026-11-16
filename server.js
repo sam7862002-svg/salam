@@ -23,7 +23,6 @@ const pool = new Pool({
 
 const INITIAL_PIH = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ==';
 
-// Auto-Heal & Migrate Database Tables on Boot
 async function initializeDatabase() {
   try {
     await pool.query(`
@@ -35,6 +34,12 @@ async function initializeDatabase() {
         vat_number VARCHAR(15) NOT NULL DEFAULT '300000000000003',
         cr_number VARCHAR(20) DEFAULT '1010000000',
         address_ar TEXT DEFAULT 'جدة، المملكة العربية السعودية',
+        building_no VARCHAR(10) DEFAULT '',
+        street_name VARCHAR(100) DEFAULT '',
+        district VARCHAR(100) DEFAULT '',
+        city VARCHAR(100) DEFAULT 'Jeddah',
+        postal_code VARCHAR(10) DEFAULT '',
+        additional_no VARCHAR(10) DEFAULT '',
         bank_name VARCHAR(100) DEFAULT '',
         bank_account_no VARCHAR(60) DEFAULT '',
         bank_iban VARCHAR(60) DEFAULT '',
@@ -46,9 +51,17 @@ async function initializeDatabase() {
         secret_key TEXT,
         admin_pin VARCHAR(20) DEFAULT '1234',
         cashier_pin VARCHAR(20) DEFAULT '0000',
+        master_reset_pass VARCHAR(30) DEFAULT 'admin123',
         last_icv INTEGER DEFAULT 0,
         last_pih TEXT DEFAULT '${INITIAL_PIH}'
       );
+
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS building_no VARCHAR(10) DEFAULT '';
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS street_name VARCHAR(100) DEFAULT '';
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS district VARCHAR(100) DEFAULT '';
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS city VARCHAR(100) DEFAULT 'Jeddah';
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS postal_code VARCHAR(10) DEFAULT '';
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS additional_no VARCHAR(10) DEFAULT '';
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS shop_phone VARCHAR(30) DEFAULT '';
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100) DEFAULT '';
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS bank_account_no VARCHAR(60) DEFAULT '';
@@ -57,6 +70,9 @@ async function initializeDatabase() {
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS auto_print BOOLEAN DEFAULT TRUE;
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS admin_pin VARCHAR(20) DEFAULT '1234';
       ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS cashier_pin VARCHAR(20) DEFAULT '0000';
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS master_reset_pass VARCHAR(30) DEFAULT 'admin123';
+
+      ALTER TABLE parties ADD COLUMN IF NOT EXISTS account_mode VARCHAR(15) CHECK (account_mode IN ('CASH', 'CREDIT')) DEFAULT 'CREDIT';
 
       ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS prev_balance NUMERIC(12, 2) DEFAULT 0.00;
       ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS new_balance NUMERIC(12, 2) DEFAULT 0.00;
@@ -76,8 +92,8 @@ async function initializeDatabase() {
       VALUES (1, 'Saudi Retail Store', 'متجر التجزئة السعودي', '300000000000003', 0)
       ON CONFLICT (id) DO NOTHING;
 
-      INSERT INTO parties (party_id, party_type, name_en, name_ar, opening_balance)
-      VALUES (1, 'CUSTOMER', 'WALK-IN CASH CUSTOMER', 'عميل نقدي', 0.00)
+      INSERT INTO parties (party_id, party_type, account_mode, name_en, name_ar, opening_balance)
+      VALUES (1, 'CUSTOMER', 'CASH', 'WALK-IN CASH CUSTOMER', 'عميل نقدي', 0.00)
       ON CONFLICT (party_id) DO NOTHING;
 
       INSERT INTO staff_users (staff_name, role, pin) VALUES ('Owner / Admin', 'ADMIN', '1234') ON CONFLICT (pin) DO NOTHING;
@@ -90,7 +106,6 @@ async function initializeDatabase() {
 }
 initializeDatabase();
 
-// Background Batch Sync for Pending B2C Invoices (Every 60 minutes)
 async function syncPendingZatcaInvoices() {
   try {
     const compRes = await pool.query('SELECT * FROM company_settings WHERE id = 1');
@@ -123,7 +138,6 @@ async function syncPendingZatcaInvoices() {
 }
 setInterval(syncPendingZatcaInvoices, 60 * 60 * 1000);
 
-// Helper: Calculate live net balance of a party
 async function getPartyLiveBalance(clientOrPool, partyId) {
   const { rows } = await clientOrPool.query(`
     SELECT 
@@ -142,7 +156,6 @@ async function getPartyLiveBalance(clientOrPool, partyId) {
   return rows.length ? Number(rows[0].current_balance) : 0;
 }
 
-// 0. Login Verification
 app.post('/api/login', async (req, res) => {
   const { pin } = req.body;
   try {
@@ -160,7 +173,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Staff Users Management
 app.get('/api/staff', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM staff_users ORDER BY user_id ASC');
@@ -192,7 +204,6 @@ app.delete('/api/staff/:id', async (req, res) => {
   }
 });
 
-// 1. Company & ZATCA Settings
 app.get('/api/settings', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM company_settings WHERE id = 1');
@@ -205,23 +216,26 @@ app.get('/api/settings', async (req, res) => {
 app.post('/api/settings', async (req, res) => {
   const {
     company_name_en, company_name_ar, shop_phone, vat_number, cr_number, address_ar,
+    building_no, street_name, district, city, postal_code, additional_no,
     bank_name, bank_account_no, bank_iban, paper_size, auto_print,
-    zatca_env, csid_certificate, private_key, secret_key, admin_pin, cashier_pin
+    zatca_env, csid_certificate, private_key, secret_key, admin_pin, cashier_pin, master_reset_pass
   } = req.body;
   try {
     await pool.query(
       `UPDATE company_settings SET 
         company_name_en=$1, company_name_ar=$2, shop_phone=$3, vat_number=$4, cr_number=$5, 
-        address_ar=$6, bank_name=$7, bank_account_no=$8, bank_iban=$9, paper_size=$10, auto_print=$11,
-        zatca_env=$12, csid_certificate=$13, private_key=$14, secret_key=$15,
-        admin_pin=$16, cashier_pin=$17
+        address_ar=$6, building_no=$7, street_name=$8, district=$9, city=$10, postal_code=$11, additional_no=$12,
+        bank_name=$13, bank_account_no=$14, bank_iban=$15, paper_size=$16, auto_print=$17,
+        zatca_env=$18, csid_certificate=$19, private_key=$20, secret_key=$21,
+        admin_pin=$22, cashier_pin=$23, master_reset_pass=$24
        WHERE id = 1`,
       [
         company_name_en, company_name_ar, shop_phone || '', vat_number, cr_number,
-        address_ar, bank_name || '', bank_account_no || '', bank_iban || '',
+        address_ar, building_no || '', street_name || '', district || '', city || 'Jeddah', postal_code || '', additional_no || '',
+        bank_name || '', bank_account_no || '', bank_iban || '',
         paper_size || '80mm', auto_print !== false,
         zatca_env, csid_certificate, private_key, secret_key,
-        admin_pin || '1234', cashier_pin || '0000'
+        admin_pin || '1234', cashier_pin || '0000', master_reset_pass || 'admin123'
       ]
     );
     res.json({ success: true });
@@ -230,7 +244,6 @@ app.post('/api/settings', async (req, res) => {
   }
 });
 
-// 2. Parties (Customers & Vendors)
 app.get('/api/parties', async (req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -256,12 +269,12 @@ app.get('/api/parties', async (req, res) => {
 });
 
 app.post('/api/parties', async (req, res) => {
-  const { party_type, name_en, name_ar, vat_number, cr_number, phone, address, opening_balance } = req.body;
+  const { party_type, account_mode, name_en, name_ar, vat_number, cr_number, phone, address, opening_balance } = req.body;
   try {
     const { rows } = await pool.query(
-      `INSERT INTO parties (party_type, name_en, name_ar, vat_number, cr_number, phone, address, opening_balance)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [party_type, (name_en || '').toUpperCase(), name_ar, vat_number || null, cr_number || null, phone || null, address || null, opening_balance || 0]
+      `INSERT INTO parties (party_type, account_mode, name_en, name_ar, vat_number, cr_number, phone, address, opening_balance)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [party_type, account_mode || 'CREDIT', (name_en || '').toUpperCase(), name_ar, vat_number || null, cr_number || null, phone || null, address || null, opening_balance || 0]
     );
     res.json(rows[0]);
   } catch (e) {
@@ -270,12 +283,12 @@ app.post('/api/parties', async (req, res) => {
 });
 
 app.put('/api/parties/:id', async (req, res) => {
-  const { party_type, name_en, name_ar, vat_number, phone, opening_balance } = req.body;
+  const { party_type, account_mode, name_en, name_ar, vat_number, phone, opening_balance } = req.body;
   try {
     const { rows } = await pool.query(
-      `UPDATE parties SET party_type=$1, name_en=$2, name_ar=$3, vat_number=$4, phone=$5, opening_balance=$6
-       WHERE party_id=$7 RETURNING *`,
-      [party_type, (name_en || '').toUpperCase(), name_ar, vat_number || null, phone || null, opening_balance || 0, req.params.id]
+      `UPDATE parties SET party_type=$1, account_mode=$2, name_en=$3, name_ar=$4, vat_number=$5, phone=$6, opening_balance=$7
+       WHERE party_id=$8 RETURNING *`,
+      [party_type, account_mode || 'CREDIT', (name_en || '').toUpperCase(), name_ar, vat_number || null, phone || null, opening_balance || 0, req.params.id]
     );
     res.json(rows[0]);
   } catch (e) {
@@ -300,16 +313,15 @@ app.post('/api/parties/bulk', async (req, res) => {
   for (const p of list) {
     if (!p.name_en) continue;
     await pool.query(
-      `INSERT INTO parties (party_type, name_en, name_ar, vat_number, phone, opening_balance)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [p.party_type || 'CUSTOMER', String(p.name_en).toUpperCase(), p.name_ar || '', p.vat_number || null, p.phone || null, Number(p.opening_balance || 0)]
+      `INSERT INTO parties (party_type, account_mode, name_en, name_ar, vat_number, phone, opening_balance)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [p.party_type || 'CUSTOMER', p.account_mode || 'CREDIT', String(p.name_en).toUpperCase(), p.name_ar || '', p.vat_number || null, p.phone || null, Number(p.opening_balance || 0)]
     );
     count++;
   }
   res.json({ inserted: count });
 });
 
-// 3. Products
 app.get('/api/products', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM products ORDER BY product_id DESC');
@@ -331,7 +343,8 @@ app.post('/api/products', async (req, res) => {
          name_ar = EXCLUDED.name_ar,
          cost_price = EXCLUDED.cost_price,
          selling_price = EXCLUDED.selling_price,
-         vat_rate = EXCLUDED.vat_rate
+         vat_rate = EXCLUDED.vat_rate,
+         stock_qty = products.stock_qty + EXCLUDED.stock_qty
        RETURNING *`,
       [barcode ? barcode.trim() : null, upperName, name_ar || upperName, cost_price || 0, selling_price, vat_rate ?? 15, stock_qty || 0]
     );
@@ -389,7 +402,6 @@ app.post('/api/products/bulk', async (req, res) => {
   res.json({ imported: count });
 });
 
-// 4. Create Sales Invoice or Credit Note (Instant B2C Print + Real-Time B2B Clearance)
 app.post('/api/sales', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -481,7 +493,6 @@ app.post('/api/sales', async (req, res) => {
       ecdsaSignatureBase64: ecdsaSig
     });
 
-    // B2B requires immediate ZATCA Clearance; B2C prints instantly & queues for Z-Close/Batch Reporting within 24h
     let zatcaRes = { status: 'PENDING_REPORT', mode: 'INSTANT_B2C_QUEUE' };
     if (isB2B) {
       zatcaRes = await submitToZatca({
@@ -529,7 +540,6 @@ app.post('/api/sales', async (req, res) => {
   }
 });
 
-// Manual Z-Close / Batch ZATCA Reporting Trigger
 app.post('/api/zatca/sync-batch', async (req, res) => {
   const result = await syncPendingZatcaInvoices();
   res.json(result);
@@ -584,7 +594,6 @@ app.get('/api/sales/:id', async (req, res) => {
   }
 });
 
-// Download Signed ZATCA XML for Audit / Authority Inspection
 app.get('/api/sales/:id/xml', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT invoice_number, xml_content FROM sales_transactions WHERE sale_id = $1', [req.params.id]);
@@ -597,7 +606,6 @@ app.get('/api/sales/:id/xml', async (req, res) => {
   }
 });
 
-// 5. Create Purchase or Purchase Return
 app.post('/api/purchases', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -610,17 +618,18 @@ app.post('/api/purchases', async (req, res) => {
 
     const enrichedItems = items.map(it => {
       const qty = Number(it.qty);
-      const unitPriceIncl = Number(it.unit_price);
+      const unitPriceExcl = Number(it.unit_price); // Tax-exclusive unit price entered for purchases
       const vatRate = Number(it.vat_rate ?? 15);
-      const lineTotalIncl = qty * unitPriceIncl;
-      const lineSubExcl = lineTotalIncl / (1 + vatRate / 100);
-      const lineVat = lineTotalIncl - lineSubExcl;
+      const lineSubExcl = qty * unitPriceExcl;
+      const lineVat = lineSubExcl * (vatRate / 100);
+      const lineTotalIncl = lineSubExcl + lineVat;
+      const unitPriceIncl = unitPriceExcl * (1 + vatRate / 100);
 
       subtotalExcl += lineSubExcl;
       vatInputTotal += lineVat;
       grandTotalIncl += lineTotalIncl;
 
-      return { ...it, qty, unit_price_incl: unitPriceIncl, vat_rate: vatRate, vat_amount: lineVat, line_total: lineTotalIncl };
+      return { ...it, qty, unit_price: unitPriceIncl, unit_price_excl: unitPriceExcl, vat_rate: vatRate, vat_amount: lineVat, line_total: lineTotalIncl };
     });
 
     const isReturn = doc_type === 'PURCHASE_RETURN';
@@ -637,11 +646,11 @@ app.post('/api/purchases', async (req, res) => {
       await client.query(
         `INSERT INTO transaction_items (ref_type, ref_id, product_id, qty, unit_price, vat_rate, vat_amount, line_total)
          VALUES ('PURCHASE', $1, $2, $3, $4, $5, $6, $7)`,
-        [savedPur.purchase_id, item.product_id || null, item.qty, item.unit_price_incl.toFixed(2), item.vat_rate, item.vat_amount.toFixed(2), item.line_total.toFixed(2)]
+        [savedPur.purchase_id, item.product_id || null, item.qty, item.unit_price.toFixed(2), item.vat_rate, item.vat_amount.toFixed(2), item.line_total.toFixed(2)]
       );
       if (item.product_id) {
         const stockDelta = isReturn ? -Number(item.qty) : Number(item.qty);
-        await client.query('UPDATE products SET stock_qty = stock_qty + $1, cost_price = $2 WHERE product_id = $3', [stockDelta, item.unit_price_incl.toFixed(2), item.product_id]);
+        await client.query('UPDATE products SET stock_qty = stock_qty + $1, cost_price = $2 WHERE product_id = $3', [stockDelta, item.unit_price.toFixed(2), item.product_id]);
       }
     }
 
@@ -676,7 +685,6 @@ app.get('/api/purchases', async (req, res) => {
   }
 });
 
-// 6. Party Receipts & Payments
 app.post('/api/vouchers', async (req, res) => {
   const { party_id, voucher_type, amount, payment_mode, notes } = req.body;
   try {
@@ -692,7 +700,6 @@ app.post('/api/vouchers', async (req, res) => {
   }
 });
 
-// 7. Customer & Vendor Register Report
 app.get('/api/reports/party-register', async (req, res) => {
   const { from, to } = req.query;
   const startDate = from ? `${from} 00:00:00` : '2000-01-01 00:00:00';
@@ -753,7 +760,6 @@ app.get('/api/reports/party-register', async (req, res) => {
   }
 });
 
-// 8. ZATCA VAT Return Filing Summary Report & Daily Z-Report
 app.get('/api/reports/vat-return', async (req, res) => {
   const { from, to } = req.query;
   const startDate = from ? `${from} 00:00:00` : '2000-01-01 00:00:00';
@@ -806,7 +812,6 @@ app.get('/api/reports/vat-return', async (req, res) => {
   }
 });
 
-// 9. FULL DATABASE BACKUP (DOWNLOAD JSON), RESTORE (UPLOAD JSON) & FACTORY RESET
 app.get('/api/system/backup', async (req, res) => {
   try {
     const settings = await pool.query('SELECT * FROM company_settings');
@@ -819,7 +824,7 @@ app.get('/api/system/backup', async (req, res) => {
     const vouchers = await pool.query('SELECT * FROM party_vouchers');
 
     const backupObj = {
-      version: '4.0.0',
+      version: '6.0.0',
       exported_at: new Date().toISOString(),
       data: {
         company_settings: settings.rows,
@@ -841,7 +846,13 @@ app.get('/api/system/backup', async (req, res) => {
 });
 
 app.post('/api/system/restore', async (req, res) => {
-  const { data } = req.body;
+  const { data, master_password } = req.body;
+  const settingsRes = await pool.query('SELECT master_reset_pass FROM company_settings WHERE id = 1');
+  const correctPass = settingsRes.rows[0]?.master_reset_pass || 'admin123';
+  if (master_password !== correctPass) {
+    return res.status(401).json({ error: 'Incorrect Master Security Password (admin123)' });
+  }
+
   if (!data || !data.products || !data.parties) {
     return res.status(400).json({ error: 'Invalid backup file format' });
   }
@@ -856,8 +867,8 @@ app.post('/api/system/restore', async (req, res) => {
     }
     for (const p of (data.parties || [])) {
       await client.query(
-        'INSERT INTO parties (party_id, party_type, name_en, name_ar, vat_number, cr_number, phone, address, opening_balance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-        [p.party_id, p.party_type, p.name_en, p.name_ar, p.vat_number, p.cr_number, p.phone, p.address, p.opening_balance || 0]
+        'INSERT INTO parties (party_id, party_type, account_mode, name_en, name_ar, vat_number, cr_number, phone, address, opening_balance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+        [p.party_id, p.party_type, p.account_mode || 'CREDIT', p.name_en, p.name_ar, p.vat_number, p.cr_number, p.phone, p.address, p.opening_balance || 0]
       );
     }
     await client.query("SELECT setval('parties_party_id_seq', COALESCE((SELECT MAX(party_id) FROM parties), 1))");
@@ -909,8 +920,10 @@ app.post('/api/system/restore', async (req, res) => {
       const c = data.company_settings[0];
       await client.query(
         `UPDATE company_settings SET company_name_en=$1, company_name_ar=$2, shop_phone=$3, vat_number=$4, cr_number=$5, address_ar=$6,
-          bank_name=$7, bank_account_no=$8, bank_iban=$9, paper_size=$10, auto_print=$11, last_icv=$12, last_pih=$13 WHERE id = 1`,
+          building_no=$7, street_name=$8, district=$9, city=$10, postal_code=$11, additional_no=$12,
+          bank_name=$13, bank_account_no=$14, bank_iban=$15, paper_size=$16, auto_print=$17, last_icv=$18, last_pih=$19 WHERE id = 1`,
         [c.company_name_en, c.company_name_ar, c.shop_phone || '', c.vat_number, c.cr_number, c.address_ar,
+         c.building_no || '', c.street_name || '', c.district || '', c.city || 'Jeddah', c.postal_code || '', c.additional_no || '',
          c.bank_name || '', c.bank_account_no || '', c.bank_iban || '', c.paper_size || '80mm', c.auto_print !== false, c.last_icv || 0, c.last_pih || INITIAL_PIH]
       );
     }
@@ -925,9 +938,14 @@ app.post('/api/system/restore', async (req, res) => {
   }
 });
 
-// Reset All Transactions to Zero (Keeps Settings, Products & Parties intact, resets balances & ICV to 0)
 app.post('/api/system/reset-transactions', async (req, res) => {
-  const { keepMasterData } = req.body;
+  const { keepMasterData, master_password } = req.body;
+  const settingsRes = await pool.query('SELECT master_reset_pass FROM company_settings WHERE id = 1');
+  const correctPass = settingsRes.rows[0]?.master_reset_pass || 'admin123';
+  if (master_password !== correctPass) {
+    return res.status(401).json({ error: 'Incorrect Master Security Password (admin123)' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -936,8 +954,8 @@ app.post('/api/system/reset-transactions', async (req, res) => {
     if (!keepMasterData) {
       await client.query('TRUNCATE TABLE products, parties RESTART IDENTITY CASCADE');
       await client.query(`
-        INSERT INTO parties (party_id, party_type, name_en, name_ar, opening_balance)
-        VALUES (1, 'CUSTOMER', 'WALK-IN CASH CUSTOMER', 'عميل نقدي', 0.00)
+        INSERT INTO parties (party_id, party_type, account_mode, name_en, name_ar, opening_balance)
+        VALUES (1, 'CUSTOMER', 'CASH', 'WALK-IN CASH CUSTOMER', 'عميل نقدي', 0.00)
         ON CONFLICT (party_id) DO NOTHING;
       `);
     } else {
@@ -956,4 +974,4 @@ app.post('/api/system/reset-transactions', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Saudi ZATCA Phase 2 POS v4 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Saudi ZATCA Phase 2 POS v6 running on port ${PORT}`));

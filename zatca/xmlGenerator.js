@@ -48,10 +48,16 @@ function generateZatcaXML({ company, invoice, party, items }) {
   supplier.ele('cac:PartyIdentification')
     .ele('cbc:ID', { schemeID: 'CRN' }).txt(company.cr_number || '1010000000').up()
     .up();
-  supplier.ele('cac:PostalAddress')
-    .ele('cbc:StreetName').txt(company.address_ar || 'جدة').up()
-    .ele('cac:Country').ele('cbc:IdentificationCode').txt('SA').up().up()
-    .up();
+  
+  const supAddr = supplier.ele('cac:PostalAddress');
+  if (company.building_no) supAddr.ele('cbc:BuildingNumber').txt(company.building_no).up();
+  if (company.street_name) supAddr.ele('cbc:StreetName').txt(company.street_name).up();
+  if (company.district) supAddr.ele('cbc:CitySubdivisionName').txt(company.district).up();
+  supAddr.ele('cbc:CityName').txt(company.city || 'Jeddah').up();
+  if (company.postal_code) supAddr.ele('cbc:PostalZone').txt(company.postal_code).up();
+  if (company.additional_no) supAddr.ele('cbc:PlotIdentification').txt(company.additional_no).up();
+  supAddr.ele('cac:Country').ele('cbc:IdentificationCode').txt('SA').up().up();
+
   supplier.ele('cac:PartyTaxScheme')
     .ele('cbc:CompanyID').txt(company.vat_number).up()
     .ele('cac:TaxScheme').ele('cbc:ID').txt('VAT').up().up()
