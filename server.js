@@ -105,6 +105,11 @@ async function initializeDatabase() {
 
       ALTER TABLE parties ADD COLUMN IF NOT EXISTS account_mode VARCHAR(15) CHECK (account_mode IN ('CASH', 'CREDIT')) DEFAULT 'CREDIT';
 
+      
+      ALTER TABLE shops ADD COLUMN IF NOT EXISTS last_icv INTEGER DEFAULT 0;
+      ALTER TABLE shops ADD COLUMN IF NOT EXISTS last_pih TEXT DEFAULT 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ==';
+      ALTER TABLE shops ADD COLUMN IF NOT EXISTS is_zatca_enabled BOOLEAN DEFAULT TRUE;
+
       ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(shop_id) DEFAULT 1;
       ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS prev_balance NUMERIC(12, 2) DEFAULT 0.00;
       ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS new_balance NUMERIC(12, 2) DEFAULT 0.00;
@@ -407,7 +412,7 @@ app.post('/api/sales', async (req, res) => {
     if (!shop) throw new Error('Shop not found');
 
     const nextIcv = Number(shop.last_icv || 0) + 1;
-    const pih = shop.last_pih;
+    const pih = shop.last_pih || INITIAL_PIH;
 
     const targetPartyId = party_id || 1;
     const partyRes = await client.query('SELECT * FROM parties WHERE party_id = $1', [targetPartyId]);

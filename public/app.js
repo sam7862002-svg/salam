@@ -194,6 +194,7 @@ async function doLogin() {
       return;
     }
 
+
     currentRole = data.role;
     currentStaffName = data.staff_name || data.role;
     activeShopId = Number(data.shop_id || 1);
@@ -205,10 +206,16 @@ async function doLogin() {
     document.getElementById('roleBadge').innerText = `${currentStaffName} (${currentRole})`;
     document.getElementById('loginScreen').classList.add('hidden');
 
-    document.querySelectorAll('.admin-only').forEach(el => {
-      if (currentRole === 'CASHIER') el.classList.add('hidden');
-      else el.classList.remove('hidden');
-    });
+    if (currentRole === 'CASHIER') {
+      document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
+      const shopSel = document.getElementById('activeShopSelect');
+      if (shopSel) shopSel.disabled = true;
+    } else {
+      document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+      const shopSel = document.getElementById('activeShopSelect');
+      if (shopSel) shopSel.disabled = false;
+    }
+
 
     await init();
   } finally {
@@ -1527,4 +1534,16 @@ async function exportCustomerLedger() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Ledger Statement');
   XLSX.writeFile(wb, `${data.party.name_en}_Statement.xlsx`);
+}
+
+function toggleSplitPayment(mode) {
+  const box = document.getElementById('splitPaymentFields');
+  if (mode === 'SPLIT') {
+    box.classList.remove('hidden');
+    const total = Number(document.getElementById('cartTotal').innerText.replace(' SAR', '') || 0);
+    document.getElementById('splitCashAmt').value = (total / 2).toFixed(2);
+    document.getElementById('splitBankAmt').value = (total / 2).toFixed(2);
+  } else {
+    box.classList.add('hidden');
+  }
 }

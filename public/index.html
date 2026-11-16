@@ -138,15 +138,29 @@
             <select id="saleParty" onchange="onPartySelectionChange('SALE')" class="w-full border p-2 rounded text-sm font-semibold"></select>
             <div id="salePartyBalanceBox" class="text-xs mt-1 font-bold text-slate-600 px-1">Balance: 0.00 SAR</div>
           </div>
+
           <div>
-            <select id="salePaymentMode" class="w-full border p-2 rounded text-sm font-semibold">
+            <select id="salePaymentMode" onchange="toggleSplitPayment(this.value)" class="w-full border p-2 rounded text-sm font-semibold">
               <option value="CASH">CASH</option>
               <option value="MADA">MADA / CARD</option>
               <option value="CREDIT">CREDIT (UDHAAR)</option>
               <option value="BANK">BANK TRANSFER</option>
+              <option value="SPLIT">SPLIT (Cash + Bank)</option>
             </select>
           </div>
         </div>
+
+        <div id="splitPaymentFields" class="hidden grid grid-cols-2 gap-2 mb-3 bg-emerald-50 p-2.5 rounded border border-emerald-300 text-xs">
+          <div>
+            <label class="font-bold text-slate-700">Cash Amount:</label>
+            <input id="splitCashAmt" type="number" placeholder="0.00" class="w-full border p-1.5 rounded font-bold" />
+          </div>
+          <div>
+            <label class="font-bold text-slate-700">Bank / Mada Amount:</label>
+            <input id="splitBankAmt" type="number" placeholder="0.00" class="w-full border p-1.5 rounded font-bold" />
+          </div>
+        </div>
+
 
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-left border">
