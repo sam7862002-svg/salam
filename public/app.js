@@ -25,6 +25,108 @@ const RETAIL_DICT = {
   almarai: 'المراعي', nadec: 'نادك', saudia: 'السعودية'
 };
 
+const TRANSLATIONS = {
+  EN: {
+    tab_pos: 'POS / Credit Note',
+    tab_purchase: 'Purchase / Return',
+    tab_history: 'Bills History',
+    tab_parties: 'Customers & Vendors',
+    tab_products: 'Products',
+    tab_reports: 'VAT & Z-Close',
+    tab_settings: 'Settings & Backup',
+    btn_lock: 'Lock',
+    lbl_sales_credit: 'Sales / Credit Note',
+    th_item: 'Item (EN / AR)',
+    th_qty: 'Qty',
+    th_price: 'Price (Incl.)',
+    th_vat: 'VAT%',
+    th_total: 'Total',
+    lbl_summary: 'Bill Summary',
+    lbl_subtotal: 'Base Amount (Excl. VAT):',
+    lbl_vat_amt: 'VAT (15% Included):',
+    lbl_grand_total: 'Grand Total:',
+    lbl_cash_tendered: 'Cash Received:',
+    lbl_change: 'Balance / Change:',
+    btn_checkout: '⚡ Instant Bill & Print',
+    lbl_purchase_title: 'Purchase & Purchase Return (Enter Unit Cost Excl. VAT)',
+    th_unit_cost: 'Unit Cost (Excl. VAT)',
+    btn_save_purchase: 'Save Purchase / Return',
+    lbl_history_title: 'Recent ZATCA Invoices & Credit Notes',
+    th_inv_no: 'Invoice No',
+    th_date: 'Date',
+    th_type: 'Type',
+    th_customer: 'Customer',
+    th_mode: 'Mode',
+    th_staff: 'Staff',
+    th_status: 'ZATCA Status',
+    th_actions: 'Actions',
+    lbl_vat_filters: 'VAT Return & Sales Register Filters'
+  },
+  AR: {
+    tab_pos: 'نقطة البيع / إشعار دائن',
+    tab_purchase: 'المشتريات / المرتجعات',
+    tab_history: 'سجل الفواتير',
+    tab_parties: 'العملاء والموردون',
+    tab_products: 'المنتجات',
+    tab_reports: 'تقرير الضريبة والإغلاق',
+    tab_settings: 'الإعدادات والنسخ الاحتياطي',
+    btn_lock: 'قفل',
+    lbl_sales_credit: 'المبيعات / إشعار دائن',
+    th_item: 'الصنف (إنجليزي / عربي)',
+    th_qty: 'الكمية',
+    th_price: 'السعر (شامل)',
+    th_vat: 'الضريبة%',
+    th_total: 'المجموع',
+    lbl_summary: 'ملخص الفاتورة',
+    lbl_subtotal: 'المبلغ غير شامل الضريبة:',
+    lbl_vat_amt: 'ضريبة القيمة المضافة (15%):',
+    lbl_grand_total: 'المجموع النهائي:',
+    lbl_cash_tendered: 'المبلغ المستلم:',
+    lbl_change: 'المتبقي / الباقي:',
+    btn_checkout: '⚡ إصدار وطباعة الفورية',
+    lbl_purchase_title: 'المشتريات والمرتجعات (أدخل التكلفة بدون ضريبة)',
+    th_unit_cost: 'التكلفة (بدون ضريبة)',
+    btn_save_purchase: 'حفظ المشتريات / المرتجع',
+    lbl_history_title: 'سجل فواتير الزاتكا والإشعارات الدائنة',
+    th_inv_no: 'رقم الفاتورة',
+    th_date: 'التاريخ',
+    th_type: 'النوع',
+    th_customer: 'العميل',
+    th_mode: 'الطريقة',
+    th_staff: 'الموظف',
+    th_status: 'حالة الزاتكا',
+    th_actions: 'الإجراءات',
+    lbl_vat_filters: 'فلاتر تقرير الضريبة ومبيعات العملاء'
+  }
+};
+
+let currentLang = localStorage.getItem('zatca_pos_lang') || 'EN';
+
+function toggleLanguage() {
+  currentLang = currentLang === 'EN' ? 'AR' : 'EN';
+  localStorage.setItem('zatca_pos_lang', currentLang);
+  applyLanguage();
+}
+
+function applyLanguage() {
+  const btn = document.getElementById('langToggleBtn');
+  if (btn) btn.innerText = currentLang === 'EN' ? 'العربية 🇸🇦' : 'English 🌐';
+  
+  if (currentLang === 'AR') {
+    document.documentElement.setAttribute('dir', 'rtl');
+  } else {
+    document.documentElement.setAttribute('dir', 'ltr');
+  }
+
+  const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.EN;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (dict[key]) {
+      el.innerText = dict[key];
+    }
+  });
+}
+
 async function autoTranslate(text, targetInputId) {
   const target = document.getElementById(targetInputId);
   if (!text || !text.trim() || (target && target.value.trim())) return;
@@ -43,7 +145,6 @@ async function autoTranslate(text, targetInputId) {
   }).join(' ');
 }
 
-// Check persisted login on load (Prevents pull-to-refresh logout)
 window.addEventListener('DOMContentLoaded', () => {
   applyLanguage();
   const savedRole = localStorage.getItem('zatca_pos_role');
@@ -62,7 +163,6 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginPin').focus();
   }
 
-  // Check online/offline status
   window.addEventListener('online', () => document.getElementById('offlineBadge').classList.add('hidden'));
   window.addEventListener('offline', () => document.getElementById('offlineBadge').classList.remove('hidden'));
   if (!navigator.onLine) document.getElementById('offlineBadge').classList.remove('hidden');
@@ -149,7 +249,6 @@ function togglePurReturnFields() {
   else box.classList.add('hidden');
 }
 
-// Smart Party selection (Cash vs Credit account mode auto-switch payment mode)
 function onPartySelectionChange(mode) {
   const selId = mode === 'SALE' ? 'saleParty' : 'purParty';
   const payModeId = mode === 'SALE' ? 'salePaymentMode' : 'purPayMode';
@@ -167,7 +266,6 @@ function onPartySelectionChange(mode) {
   }
 }
 
-// --- LIVE SEARCH DROPDOWN ---
 function showLiveSearchDropdown(query, mode) {
   const dropdownId = mode === 'SALE' ? 'posSearchDropdown' : 'purSearchDropdown';
   const box = document.getElementById(dropdownId);
@@ -231,7 +329,6 @@ function selectFromDropdown(productId, mode) {
   }
 }
 
-// --- BARCODE SCANNER ---
 function playBeep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -341,7 +438,6 @@ async function saveQuickProduct() {
   else addProductObjectToPurCart(newProd);
 }
 
-// --- SMART PRODUCTS TAB BARCODE SCAN (EDIT OR STOCK ADD) ---
 function checkProductBarcode(barcode) {
   const code = (barcode || '').trim();
   if (!code) return;
@@ -357,7 +453,6 @@ function checkProductBarcode(barcode) {
   }
 }
 
-// --- SMART CART & EXPANDABLE DISCREET COST ---
 function addProductToSaleCart(prod) {
   const existing = cart.find(c => c.product_id === prod.product_id);
   if (existing) {
@@ -484,7 +579,6 @@ function updatePartyLiveBalance(mode) {
   }
 }
 
-// --- RECEIPT & SMART AUTO-PRINT ROUTING ---
 function showReceipt(data, isNewSale = false) {
   lastCompletedReceipt = data;
   const { sale, items, company, party } = data;
@@ -671,7 +765,6 @@ async function sharePdfOnWhatsApp() {
   }
 }
 
-// --- PURCHASE (TAX-EXCLUSIVE UNIT COST) ---
 function addProductObjectToPurCart(prod) {
   const existing = purCart.find(c => c.product_id === prod.product_id);
   const defaultExcl = Number(prod.cost_price || prod.selling_price) / 1.15;
@@ -815,15 +908,12 @@ async function loadParties() {
     const balTag = bal !== 0 ? ` [Bal: ${bal.toFixed(2)}]` : '';
     const opt = `<option value="${p.party_id}">${p.name_en} (${p.party_type} - ${p.account_mode})${balTag}</option>`;
     
-    // POS / Credit Note ONLY shows Customers & Both (Strictly exclude pure VENDORS)
     if (p.party_type === 'CUSTOMER' || p.party_type === 'BOTH') {
       saleSel.innerHTML += opt;
     }
-    // Purchase / Return ONLY shows Vendors & Both (Strictly exclude pure CUSTOMERS)
     if (p.party_type === 'VENDOR' || p.party_type === 'BOTH') {
       purSel.innerHTML += opt;
     }
-    // Vouchers show all parties
     vSel.innerHTML += opt;
 
     tbody.innerHTML += `<tr class="border-t hover:bg-slate-50">
@@ -961,7 +1051,6 @@ async function saveVoucher() {
   alert('Voucher Recorded & Balance Updated!');
 }
 
-// --- PRODUCTS ---
 async function loadProducts() {
   const res = await fetch('/api/products');
   products = await res.json();
@@ -1093,7 +1182,6 @@ function uploadProductExcel(event) {
   reader.readAsBinaryString(file);
 }
 
-// --- SETTINGS, BACKUP, RESTORE & MASTER RESET PASSWORD ---
 async function loadSettings() {
   const res = await fetch('/api/settings');
   const data = await res.json();
@@ -1244,7 +1332,6 @@ async function deleteStaffUser(id) {
   loadStaffUsers();
 }
 
-// --- VAT REPORT FILTERING (QUARTERS, MONTHS, CUSTOM DATES) ---
 function setVatFilter(type) {
   const now = new Date();
   const year = now.getFullYear();
@@ -1271,6 +1358,17 @@ function setVatFilter(type) {
 
   document.getElementById('repFrom').value = startStr;
   document.getElementById('repTo').value = endStr;
+  loadReports();
+}
+
+function setMonthFilter(month) {
+  if (!month) return;
+  const now = new Date();
+  const year = now.getFullYear();
+  const firstDay = new Date(year, Number(month) - 1, 1);
+  const lastDay = new Date(year, Number(month), 0);
+  document.getElementById('repFrom').value = firstDay.toISOString().slice(0, 10);
+  document.getElementById('repTo').value = lastDay.toISOString().slice(0, 10);
   loadReports();
 }
 
@@ -1404,22 +1502,24 @@ let currentLang = localStorage.getItem('zatca_pos_lang') || 'EN';
 
 const TRANSLATIONS = {
   EN: {
-    pos: 'POS / Credit Note',
-    purchase: 'Purchase / Return',
-    history: 'Bills History',
-    parties: 'Customers & Vendors',
-    products: 'Products',
-    reports: 'VAT & Z-Close',
-    settings: 'Settings & Backup'
+    tab_pos: 'POS / Credit Note',
+    tab_purchase: 'Purchase / Return',
+    tab_history: 'Bills History',
+    tab_parties: 'Customers & Vendors',
+    tab_products: 'Products',
+    tab_reports: 'VAT & Z-Close',
+    tab_settings: 'Settings & Backup',
+    btn_lock: 'Lock'
   },
   AR: {
-    pos: 'نقطة البيع / إشعار دائن',
-    purchase: 'المشتريات / المرتجعات',
-    history: 'سجل الفواتير',
-    parties: 'العملاء والموردون',
-    products: 'المنتجات',
-    reports: 'تقرير الضريبة والإغلاق',
-    settings: 'الإعدادات والنسخ الاحتياطي'
+    tab_pos: 'نقطة البيع / إشعار دائن',
+    tab_purchase: 'المشتريات / المرتجعات',
+    tab_history: 'سجل الفواتير',
+    tab_parties: 'العملاء والموردون',
+    tab_products: 'المنتجات',
+    tab_reports: 'تقرير الضريبة والإغلاق',
+    tab_settings: 'الإعدادات والنسخ الاحتياطي',
+    btn_lock: 'قفل'
   }
 };
 
@@ -1427,28 +1527,6 @@ function toggleLanguage() {
   currentLang = currentLang === 'EN' ? 'AR' : 'EN';
   localStorage.setItem('zatca_pos_lang', currentLang);
   applyLanguage();
-}
-
-function applyLanguage() {
-  const btn = document.getElementById('langToggleBtn');
-  if (btn) btn.innerText = currentLang === 'EN' ? 'العربية 🇸🇦' : 'English 🌐';
-  
-  if (currentLang === 'AR') {
-    document.documentElement.setAttribute('dir', 'rtl');
-  } else {
-    document.documentElement.setAttribute('dir', 'ltr');
-  }
-}
-
-function setMonthFilter(month) {
-  if (!month) return;
-  const now = new Date();
-  const year = now.getFullYear();
-  const firstDay = new Date(year, Number(month) - 1, 1);
-  const lastDay = new Date(year, Number(month), 0);
-  document.getElementById('repFrom').value = firstDay.toISOString().slice(0, 10);
-  document.getElementById('repTo').value = lastDay.toISOString().slice(0, 10);
-  loadReports();
 }
 
 function applyLanguage() {
