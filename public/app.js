@@ -763,6 +763,7 @@ async function loadSalesHistory() {
       <td class="p-2"><span class="px-1.5 py-0.5 rounded font-bold ${badgeClass}">${s.zatca_status}</span></td>
       <td class="p-2 space-x-1">
         <button onclick="reprintInvoice(${s.sale_id})" class="bg-blue-600 text-white px-2 py-1 rounded">Print / PDF</button>
+        <button onclick="shareHistoryInvoiceOnWhatsApp(${s.sale_id})" class="bg-green-600 text-white px-2 py-1 rounded">📲 WhatsApp</button>
         <a href="/api/sales/${s.sale_id}/xml" class="bg-slate-700 text-white px-2 py-1 rounded inline-block">XML</a>
       </td>
     </tr>`;
@@ -785,6 +786,15 @@ async function reprintInvoice(saleId) {
   showReceipt(data, false);
 }
 
+async function shareHistoryInvoiceOnWhatsApp(saleId) {
+  const res = await fetch(`/api/sales/${saleId}`);
+  const data = await res.json();
+  if (data.error) return alert(data.error);
+  lastCompletedReceipt = data;
+  populateA4Template(data);
+  await sharePdfOnWhatsApp();
+}
+
 async function loadParties() {
   const res = await fetch('/api/parties');
   parties = await res.json();
@@ -803,8 +813,16 @@ async function loadParties() {
     const bal = Number(p.current_balance || 0);
     const balTag = bal !== 0 ? ` [Bal: ${bal.toFixed(2)}]` : '';
     const opt = `<option value="${p.party_id}">${p.name_en} (${p.party_type} - ${p.account_mode})${balTag}</option>`;
-    saleSel.innerHTML += opt;
-    purSel.innerHTML += opt;
+    
+    // POS / Credit Note ONLY shows Customers & Both (Strictly exclude pure VENDORS)
+    if (p.party_type === 'CUSTOMER' || p.party_type === 'BOTH') {
+      saleSel.innerHTML += opt;
+    }
+    // Purchase / Return ONLY shows Vendors & Both (Strictly exclude pure CUSTOMERS)
+    if (p.party_type === 'VENDOR' || p.party_type === 'BOTH') {
+      purSel.innerHTML += opt;
+    }
+    // Vouchers show all parties
     vSel.innerHTML += opt;
 
     tbody.innerHTML += `<tr class="border-t hover:bg-slate-50">
@@ -1368,4 +1386,13 @@ async function exportSeparateExcel(type) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, type);
   XLSX.writeFile(wb, fileName);
+}
+
+function onPartyTypeChange(val) {
+  const balTypeSel = document.getElementById('pBalType');
+  if (val === 'VENDOR') {
+    balTypeSel.value = 'PAYABLE';
+  } else {
+    balTypeSel.value = 'RECEIVABLE';
+  }
 }
