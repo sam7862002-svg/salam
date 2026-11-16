@@ -1450,3 +1450,22 @@ function setMonthFilter(month) {
   document.getElementById('repTo').value = lastDay.toISOString().slice(0, 10);
   loadReports();
 }
+
+function applyLanguage() {
+  const btn = document.getElementById('langToggleBtn');
+  if (btn) btn.innerText = currentLang === 'EN' ? 'العربية 🇸🇦' : 'English 🌐';
+  
+  if (currentLang === 'AR') {
+    document.documentElement.setAttribute('dir', 'rtl');
+  } else {
+    document.documentElement.setAttribute('dir', 'ltr');
+  }
+
+  const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.EN;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (dict[key]) {
+      el.innerText = dict[key];
+    }
+  });
+}

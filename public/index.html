@@ -80,6 +80,12 @@
     <div class="flex flex-wrap items-center gap-1 text-sm">
       <button onclick="toggleLanguage()" class="bg-amber-400 hover:bg-amber-500 text-black font-bold px-2.5 py-1.5 rounded text-xs" id="langToggleBtn">العربية / EN</button>
       <button onclick="showTab('pos')" data-i18n="tab_pos" class="tab-btn bg-emerald-950 px-3 py-1.5 rounded hover:bg-emerald-700">POS / Credit Note</button>
+      <button onclick="showTab('purchase')" data-i18n="tab_purchase" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Purchase / Return</button>
+      <button onclick="showTab('history')" data-i18n="tab_history" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Bills History</button>
+      <button onclick="showTab('parties')" data-i18n="tab_parties" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Customers & Vendors</button>
+      <button onclick="showTab('products')" data-i18n="tab_products" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Products</button>
+      <button onclick="showTab('reports')" data-i18n="tab_reports" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">VAT & Z-Close</button>
+      <button onclick="showTab('settings')" data-i18n="tab_settings" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Settings & Backup</button>
       <button onclick="showTab('purchase')" class="tab-btn admin-only px-3 py-1.5 rounded hover:bg-emerald-700">Purchase / Return</button>
       <button onclick="showTab('history')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Bills History</button>
       <button onclick="showTab('parties')" class="tab-btn px-3 py-1.5 rounded hover:bg-emerald-700">Customers & Vendors</button>
@@ -692,21 +698,23 @@
         <div>VAT: <span id="recVat"></span></div>
         <div id="recDocType" class="font-bold mt-1"></div>
       </div>
-      <div class="mb-2 space-y-0.5">
-        <div>Inv No: <span id="recInvNo"></span> | ICV: <span id="recIcv"></span></div>
-        <div>Date: <span id="recDate"></span></div>
-        <div>Customer: <span id="recParty"></span></div>
-        <div>Mode: <span id="recPayMode"></span></div>
+
+      <div class="mb-2 space-y-0.5 text-[11px]">
+        <div>رقم الفاتورة / Inv No: <span id="recInvNo"></span> | ICV: <span id="recIcv"></span></div>
+        <div>التاريخ / Date: <span id="recDate"></span></div>
+        <div>العميل / Customer: <span id="recParty"></span></div>
+        <div>طريقة الدفع / Payment Mode: <span id="recPayMode"></span></div>
       </div>
-      <table class="w-full border-t border-b my-2 text-left">
-        <thead><tr><th>Item</th><th>Qty</th><th>Total</th></tr></thead>
+      <table class="w-full border-t border-b my-2 text-left text-[11px]">
+        <thead><tr><th>الصنف / Item</th><th>الكمية / Qty</th><th>المجموع / Total</th></tr></thead>
         <tbody id="recItems"></tbody>
       </table>
-      <div class="text-right space-y-1">
-        <div>Taxable (Excl. VAT): <span id="recSub"></span> SAR</div>
-        <div>VAT (15%): <span id="recTax"></span> SAR</div>
-        <div class="font-bold text-sm border-t pt-1">TOTAL (Incl. VAT): <span id="recGrand"></span> SAR</div>
+      <div class="text-right space-y-1 text-[11px]">
+        <div>الإجمالي غير شامل الضريبة / Taxable Excl: <span id="recSub"></span> SAR</div>
+        <div>ضريبة القيمة المضافة (15%) / VAT: <span id="recTax"></span> SAR</div>
+        <div class="font-bold text-sm border-t pt-1">المجموع النهائي / GRAND TOTAL: <span id="recGrand"></span> SAR</div>
       </div>
+
 
       <div id="recBalanceSection" class="border-t border-dashed mt-2 pt-2 text-right space-y-0.5 text-[11px]">
         <div>Previous Balance: <span id="recPrevBal">0.00</span> SAR</div>
